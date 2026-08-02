@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0 is what makes this usable from .NET Framework 4.6.2+ —
+         i.e. the VB.NET / WinForms desktop apps that are the core audience for
+         licensing. net8.0 gets the modern build with nullable annotations. -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CLS compliance is asserted in AssemblyInfo.cs so the compiler enforces it. -->
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>PWFAuth</PackageId>
+    <Version>1.0.0-preview.1</Version>
+    <Authors>PWF Auth</Authors>
+    <Company>PWF Auth</Company>
+    <Product>PWF Auth .NET Client</Product>
+    <Title>PWF Auth — license keys &amp; user auth client</Title>
+    <Description>Official .NET client for PWF Auth (pwfauth.com): license-key activation, hardware-ID binding, encrypted sessions with a server-driven kill switch, free trials, remote texts/slides, and OTA update checks. Speaks the AES-256-CBC + HMAC-SHA256 envelope protocol so you never hand-roll crypto. Works on .NET Framework 4.6.2+ and .NET 5+.</Description>
+    <PackageTags>licensing;license-key;authentication;auth;drm;activation;hwid;sdk;pwfauth</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://pwfauth.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/pwfauth/pwfauth-dotnet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Copyright>Copyright (c) 2026 PWF Auth</Copyright>
+    <PackageReleaseNotes>First public preview. Session kill switch (ban/pause/expire/HWID-reset/maintenance) plus a consecutive-failure guard so an unreachable server ends the session instead of leaving the app running.</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Reproducible builds + a symbols package so stack traces from customers
+         map back to real source lines. -->
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../assets/icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="../../README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <!-- .NET Framework / netstandard consumers need the HttpClient assembly reference. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="System.Net.Http" Version="4.3.4" />
+  </ItemGroup>
+
+</Project>
