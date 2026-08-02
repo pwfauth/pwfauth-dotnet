@@ -1,0 +1,54 @@
+name: Publish to NuGet
+
+# Publishing is irreversible on nuget.org — a version can be unlisted but never
+# deleted — so this never runs on a plain push. It runs when you publish a GitHub
+# Release (which ties the package version to a tag), or when you press the button.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write        # REQUIRED — lets GitHub mint the OIDC token nuget.org verifies
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Only the library. The samples are deliberately excluded: VbFrameworkTest
+      # targets .NET Framework 4.8.1 (Windows-only) and both samples restore the
+      # package from a local ./artifacts feed that does not exist on a clean runner.
+      - name: Build
+        run: dotnet build src/PWFAuth/PWFAuth.csproj -c Release
+
+      - name: Pack
+        run: dotnet pack src/PWFAuth/PWFAuth.csproj -c Release --no-build -o ./artifacts
+
+      - name: Show what will be pushed
+        run: ls -la ./artifacts
+
+      # The temporary key is valid for ONE hour and can be issued only once per
+      # token, so ask for it immediately before the push — never earlier in the job.
+      # `user` is the nuget.org PROFILE NAME (not an e-mail, and not a credential).
+      # Defaults to the account that owns the trusted-publishing policy; set a
+      # NUGET_USER repository secret to override it without editing this file.
+      - name: NuGet login (OIDC -> short-lived API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER || 'pwfauth' }}
+
+      - name: Push
+        run: >
+          dotnet nuget push ./artifacts/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
