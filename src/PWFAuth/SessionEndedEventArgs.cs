@@ -18,11 +18,11 @@ namespace PWFAuth
 
         /// <summary>
         /// Why the session ended: BANNED, PAUSED, EXPIRED, HWID_RESET, MAINTENANCE,
-        /// SESSION_REVOKED, SESSION_EXPIRED, SESSION_MISMATCH, or NETWORK_LOST.
+        /// SESSION_REVOKED, SESSION_EXPIRED, SESSION_MISMATCH, NETWORK_LOST or CLOCK_SKEW.
         /// </summary>
         public string ErrorCode { get; }
 
-        /// <summary>The server's explanation (or the client's, for NETWORK_LOST).</summary>
+        /// <summary>The server's explanation (or the client's, for NETWORK_LOST and CLOCK_SKEW).</summary>
         public string Message { get; }
 
         /// <summary>
