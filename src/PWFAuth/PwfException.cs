@@ -46,4 +46,21 @@ namespace PWFAuth
         /// <summary>Creates the exception with the underlying cause.</summary>
         public PwfCryptoException(string message, Exception innerException) : base(message, innerException) { }
     }
+
+    /// <summary>
+    /// A reply that must be encrypted came back as plain JSON claiming success. The
+    /// license server never sends a plain success on those endpoints — once it has
+    /// verified a request, every reply is encrypted — so this answer came from something
+    /// else: a proxy, a hosts-file redirect or a fake server standing in for pwfauth.com.
+    /// Never unlock the application on it; inside the heartbeat it counts as an
+    /// unreachable server.
+    /// </summary>
+    public class PwfSecurityException : PwfException
+    {
+        /// <summary>Creates the exception.</summary>
+        public PwfSecurityException(string message) : base(message) { }
+
+        /// <summary>Creates the exception with the underlying cause.</summary>
+        public PwfSecurityException(string message, Exception innerException) : base(message, innerException) { }
+    }
 }

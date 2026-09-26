@@ -14,19 +14,29 @@ internal static class Program
 
     private static async Task<int> Main()
     {
-        const string Secret = "5473618231295399bfe82d13f99e2aaf3f5538635293cd91cc546ff96e908f6b";
-        const string Key    = "GBB9A-46YPY-LV9FY-668HT";
+        // A test application's credentials — never committed; set them in the environment.
+        string? secret = Environment.GetEnvironmentVariable("PWFAUTH_APP_SECRET");
+        string? key    = Environment.GetEnvironmentVariable("PWFAUTH_TEST_KEY");
+        if (string.IsNullOrWhiteSpace(secret) || string.IsNullOrWhiteSpace(key))
+        {
+            Console.Error.WriteLine("Set PWFAUTH_APP_SECRET (your test app's secret) and PWFAUTH_TEST_KEY (a license key of that app), then run again:");
+            Console.Error.WriteLine("  PowerShell:  $env:PWFAUTH_APP_SECRET = \"...\"; $env:PWFAUTH_TEST_KEY = \"XXXXX-XXXXX-XXXXX-XXXXX\"");
+            Console.Error.WriteLine("  cmd:         set PWFAUTH_APP_SECRET=...  and  set PWFAUTH_TEST_KEY=XXXXX-XXXXX-XXXXX-XXXXX");
+            return 2;
+        }
+        secret = secret.Trim();
+        key = key.Trim();
 
         Console.WriteLine("HardwareId.Get() = " + HardwareId.Get());
         Check("HWID is not the bare machine name fallback",
               HardwareId.Get() != Environment.MachineName, HardwareId.Get());
 
-        using var client = new PwfClient(Secret);
+        using var client = new PwfClient(secret);
 
         var ended = new TaskCompletionSource<SessionEndedEventArgs>();
         client.SessionEnded += (s, e) => ended.TrySetResult(e);
 
-        var login = await client.LoginAsync(Key);
+        var login = await client.LoginAsync(key);
         Check("LoginAsync", login.Success, login.ToString());
         Check("SessionId populated", client.IsSignedIn);
         Check("HeartbeatInterval from server", client.HeartbeatIntervalSeconds > 0, client.HeartbeatIntervalSeconds.ToString());
@@ -34,7 +44,7 @@ internal static class Program
         var hb = await client.HeartbeatAsync();
         Check("HeartbeatAsync", hb.Success, hb.ToString());
 
-        var status = await client.CheckKeyAsync(Key);
+        var status = await client.CheckKeyAsync(key);
         Check("CheckKeyAsync", status.Success, status.ToString());
 
         var info = await client.GetAppInfoAsync();
@@ -55,14 +65,22 @@ internal static class Program
         var trial = await client.CreateTrialAsync();
         Check("CreateTrialAsync (plain-post)", trial.ErrorCode != null || trial.Success, trial.ToString());
 
-        var reset = await client.RequestHardwareResetAsync(Key, "NuGet package test");
-        Check("RequestHardwareResetAsync (plain-post)", reset.Success, reset.ToString());
+#pragma warning disable CS0618 // obsolete since 1.1.0 — still checked so existing callers keep working
+        var reset = await client.RequestHardwareResetAsync(key, "NuGet package test");
+#pragma warning restore CS0618
+        Check("RequestHardwareResetAsync (plain-post, obsolete)", reset.Success, reset.ToString());
+
+        // A real self-service reset would unbind the test key and end the session opened
+        // above, so this run only proves the plumbing with a key that does not exist.
+        var selfReset = await client.ResetHardwareIdAsync("AAAAA-AAAAA-AAAAA-AAAAA", "NuGet package test");
+        Check("ResetHardwareIdAsync rejects an unknown key",
+              !selfReset.Success && selfReset.ErrorCode == PwfErrorCodes.InvalidKey, selfReset.ToString());
 
         // Readable failure instead of a raw JSON exception
         try
         {
-            using var bad = new PwfClient(new PwfClientOptions { AppSecret = Secret, BaseUrl = "https://pwfauth.com/nope" });
-            await bad.CheckKeyAsync(Key);
+            using var bad = new PwfClient(new PwfClientOptions { AppSecret = secret, BaseUrl = "https://pwfauth.com/nope" });
+            await bad.CheckKeyAsync(key);
             Check("PwfHttpException on a wrong base URL", false, "no exception");
         }
         catch (PwfHttpException ex)
@@ -83,11 +101,11 @@ internal static class Program
         }
 
         // Kill switch: unreachable server ends the session locally
-        using (var offline = new PwfClient(new PwfClientOptions { AppSecret = Secret, MaxHeartbeatFailures = 2, Timeout = TimeSpan.FromSeconds(2) }))
+        using (var offline = new PwfClient(new PwfClientOptions { AppSecret = secret, MaxHeartbeatFailures = 2, Timeout = TimeSpan.FromSeconds(2) }))
         {
             var ev = new TaskCompletionSource<SessionEndedEventArgs>();
             offline.SessionEnded += (s, e) => ev.TrySetResult(e);
-            var l2 = await offline.LoginAsync(Key);
+            var l2 = await offline.LoginAsync(key);
             if (l2.Success)
             {
                 typeof(PwfClient).GetProperty("HeartbeatIntervalSeconds")!.SetValue(offline, 1);

@@ -66,14 +66,18 @@ package step straight into the real source.
 
 ## Release checklist for future versions
 
-1. Bump `<Version>` in `src/PWFAuth/PWFAuth.csproj`.
+1. Bump `<Version>` in `src/PWFAuth/PWFAuth.csproj`, and the `PWFAuth` package version
+   both sample projects reference.
 2. Update `<PackageReleaseNotes>` — this is what shows on the nuget.org version list, and
-   it is the only channel through which existing users learn a security fix exists.
-3. `dotnet pack src/PWFAuth/PWFAuth.csproj -c Release -o ./artifacts`
-4. Run both sample projects — `samples/QuickTest` (net8.0) and `samples/VbFrameworkTest`
+   it is the only channel through which existing users learn a security fix exists — and
+   add the same entry to `CHANGELOG.md`.
+3. `dotnet test tests/PWFAuth.Tests -c Release` — unit tests against a fake server, no
+   network needed. The publish workflow runs them too and stops before packing on a failure.
+4. `dotnet pack src/PWFAuth/PWFAuth.csproj -c Release -o ./artifacts`
+5. Run both sample projects — `samples/QuickTest` (net8.0) and `samples/VbFrameworkTest`
    (VB.NET on .NET Framework 4.8.1). They install the package from `./artifacts`, so they
    exercise the real package, not the project reference.
-5. Push.
+6. Push.
 
 Follow semantic versioning strictly. Consumers with `<PackageReference Version="1.*">`
 take minor updates automatically; a breaking change in a minor version breaks builds in

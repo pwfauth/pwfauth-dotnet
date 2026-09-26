@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -25,11 +26,24 @@ namespace PWFAuth
     ///
     /// var login = await client.LoginAsync("XXXXX-XXXXX-XXXXX-XXXXX");
     /// if (!login.Success) { MessageBox.Show(login.Message); return; }
-    /// client.StartHeartbeat();
+    /// client.StartHeartbeat();   // on the UI thread, so SessionEnded is raised there too
     /// </code>
     /// </example>
     public sealed class PwfClient : IDisposable
     {
+        // Sent on every request, e.g. "PWFAuth-dotnet/1.1.0 (+https://pwfauth.com)".
+        private static readonly string UserAgent = BuildUserAgent();
+
+        private const string DefaultResetReason = "Reset from app";
+        private const int MaxResetReasonLength = 255;
+
+        private const int TooManyRequests = 429;
+        private const string CryptoErrorCode = "CRYPTO_ERROR";   // the server could not verify the request
+        private const string NetworkLostMessage =
+            "Cannot reach the license server. Please check your connection and sign in again.";
+        private const string ClockSkewMessage =
+            "Cannot verify your license because this computer's date and time are wrong. Correct them and sign in again.";
+
         private readonly PwfClientOptions _options;
         private readonly CryptoEnvelope _crypto;
         private readonly HttpClient _http;
@@ -49,8 +63,10 @@ namespace PWFAuth
         /// <summary>Creates a client with full configuration.</summary>
         /// <param name="options">Secret, base URL, timeouts, heartbeat policy.</param>
         /// <param name="httpClient">
-        /// Supply your own (from IHttpClientFactory, or one with a proxy configured) and
-        /// this client will not dispose it. Leave null to get a private one.
+        /// Supply your own (from IHttpClientFactory, or one with a proxy configured) and this
+        /// client uses it as it is: it never disposes or reconfigures it. Set its
+        /// <see cref="HttpClient.Timeout"/> yourself — <see cref="PwfClientOptions.Timeout"/>
+        /// only applies to the HttpClient this client creates. Leave null to get a private one.
         /// </param>
         public PwfClient(PwfClientOptions options, HttpClient? httpClient = null)
         {
@@ -61,8 +77,9 @@ namespace PWFAuth
             _crypto = new CryptoEnvelope(options.AppSecret, options.MaxClockDriftSeconds);
             _baseUrl = options.BaseUrl.TrimEnd('/');
             _ownsHttpClient = httpClient == null;
-            _http = httpClient ?? new HttpClient();
-            _http.Timeout = options.Timeout;
+            // A caller's HttpClient is left alone: setting Timeout throws once it has sent a
+            // request, and the caller may depend on the value it already has.
+            _http = httpClient ?? new HttpClient { Timeout = options.Timeout };
             HardwareId = string.IsNullOrWhiteSpace(options.HardwareId)
                 ? PWFAuth.HardwareId.Get()
                 : options.HardwareId!;
@@ -72,6 +89,16 @@ namespace PWFAuth
         /// Fires when the session stops being valid. Sign the user out here — the server
         /// has already dropped the session, so continuing to run is not licensed use.
         /// </summary>
+        /// <remarks>
+        /// The handler runs on the <see cref="SynchronizationContext"/> that was current when
+        /// <see cref="StartHeartbeat"/> (or <see cref="RunHeartbeatAsync"/>) was called. Start
+        /// the heartbeat on a WinForms or WPF UI thread — for example right after
+        /// <c>await client.LoginAsync(...)</c> in a button handler — and the handler may touch
+        /// controls directly, with no <c>Invoke</c> or <c>Dispatcher</c> call. Without a context
+        /// (console apps, services, a thread-pool thread) it runs on the heartbeat's own
+        /// background thread. <see cref="PwfClientOptions.RaiseEventsOnCapturedContext"/>
+        /// set to false always gives the background-thread behaviour.
+        /// </remarks>
         public event EventHandler<SessionEndedEventArgs>? SessionEnded;
 
         /// <summary>The license key of the current session, or null when signed out.</summary>
@@ -98,6 +125,18 @@ namespace PWFAuth
         /// </summary>
         /// <param name="licenseKey">The customer's key, e.g. XXXXX-XXXXX-XXXXX-XXXXX.</param>
         /// <param name="cancellationToken">Cancels the request.</param>
+        /// <remarks>
+        /// When the key is bound to another machine the reply carries
+        /// <see cref="PwfErrorCodes.HwidMismatch"/> (or <see cref="PwfErrorCodes.DeviceLimit"/>
+        /// for multi-device keys). <see cref="ResetHardwareIdAsync"/> lets the customer move it
+        /// to this PC; then call this method again.
+        /// </remarks>
+        /// <exception cref="PwfSecurityException">
+        /// The reply was not encrypted yet claimed success — something other than the license
+        /// server answered. The user is not signed in.
+        /// </exception>
+        /// <exception cref="PwfHttpException">The server could not be reached or answered with no API payload.</exception>
+        /// <exception cref="PwfCryptoException">The encrypted reply failed verification (wrong app secret, or this machine's clock is off).</exception>
         public async Task<PwfResponse> LoginAsync(string licenseKey, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (string.IsNullOrWhiteSpace(licenseKey)) throw new ArgumentException("License key is required.", nameof(licenseKey));
@@ -151,9 +190,21 @@ namespace PWFAuth
         /// Starts the background heartbeat loop. It keeps the session alive AND obeys the
         /// owner's kill switch: a ban, pause, expiry, HWID reset, revoke or maintenance
         /// window raises <see cref="SessionEnded"/> on the next beat. So does losing the
-        /// server for <see cref="PwfClientOptions.MaxHeartbeatFailures"/> beats in a row.
-        /// Calling it twice is a no-op.
+        /// server: only an encrypted reply counts as an answer, and
+        /// <see cref="PwfClientOptions.MaxHeartbeatFailures"/> beats in a row without one — no
+        /// reply, a forged "success" (see <see cref="PwfSecurityException"/>) or a plain
+        /// refusal — end the session with <see cref="PwfErrorCodes.NetworkLost"/>, or with
+        /// <see cref="PwfErrorCodes.ClockSkew"/> when the server refused them because this
+        /// computer's clock is wrong. Plain HTTP 429 replies have their own budget,
+        /// <see cref="PwfClientOptions.MaxRateLimitedBeats"/>. Calling it twice is a no-op.
         /// </summary>
+        /// <remarks>
+        /// Call it on the UI thread in WinForms or WPF. The
+        /// <see cref="SynchronizationContext"/> current at this call is captured and
+        /// <see cref="SessionEnded"/> is raised through it, so the handler may touch controls
+        /// directly. The beats themselves never run on the UI thread. Opt out with
+        /// <see cref="PwfClientOptions.RaiseEventsOnCapturedContext"/>.
+        /// </remarks>
         public void StartHeartbeat()
         {
             lock (_sync)
@@ -163,7 +214,7 @@ namespace PWFAuth
                 if (_heartbeatTask != null && !_heartbeatTask.IsCompleted) return;
 
                 _heartbeatCts = new CancellationTokenSource();
-                _heartbeatTask = RunHeartbeatAsync(_heartbeatCts.Token);
+                _heartbeatTask = HeartbeatLoopAsync(CaptureEventContext(), _heartbeatCts.Token);
             }
         }
 
@@ -184,9 +235,33 @@ namespace PWFAuth
         /// app can simply await it). <see cref="StartHeartbeat"/> wraps this.
         /// </summary>
         /// <param name="cancellationToken">Stops the loop.</param>
-        public async Task RunHeartbeatAsync(CancellationToken cancellationToken)
+        /// <remarks>
+        /// Like <see cref="StartHeartbeat"/>, it captures the <see cref="SynchronizationContext"/>
+        /// current at the call and raises <see cref="SessionEnded"/> through it.
+        /// </remarks>
+        public Task RunHeartbeatAsync(CancellationToken cancellationToken)
         {
-            int failures = 0;
+            return HeartbeatLoopAsync(CaptureEventContext(), cancellationToken);
+        }
+
+        private SynchronizationContext? CaptureEventContext()
+        {
+            return _options.RaiseEventsOnCapturedContext ? SynchronizationContext.Current : null;
+        }
+
+        private async Task HeartbeatLoopAsync(SynchronizationContext? eventContext, CancellationToken cancellationToken)
+        {
+            // Only an encrypted reply proves the license server answered — nothing else can
+            // seal one. Every other outcome is an unanswered beat: no reply, a reply that fails
+            // verification, a forged plain "success" (PwfSecurityException), and plain
+            // refusals, which the server sends when it cannot verify the request at all. The
+            // commonest of those is its replay check rejecting a clock more than five minutes
+            // off; treating it as transient let an app whose clock was moved run forever,
+            // deaf to bans.
+            int unanswered = 0;      // beats in a row without an encrypted reply (not 429)
+            int plainRefusals = 0;   //   ...of which were plain refusals from the server
+            int clockRefusals = 0;   //   ...of which blamed this computer's clock
+            int rateLimited = 0;     // beats in a row answered with HTTP 429
 
             while (!cancellationToken.IsCancellationRequested && IsSignedIn)
             {
@@ -198,46 +273,105 @@ namespace PWFAuth
 
                 if (!IsSignedIn) return;
 
-                PwfResponse? beat = null;
+                PwfResponse beat;
                 try
                 {
                     beat = await HeartbeatAsync(cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { return; }
+                catch (PwfHttpException ex) when (ex.StatusCode == TooManyRequests)
+                {
+                    // A 429 page from something in front of the server (a CDN, say).
+                    if (++rateLimited >= _options.MaxRateLimitedBeats)
+                    {
+                        EndSession(PwfErrorCodes.NetworkLost, NetworkLostMessage, eventContext);
+                        return;
+                    }
+                    continue;
+                }
                 catch (Exception)
                 {
                     // Transport failure: the server may be down, or someone may have
                     // blocked this domain to keep the app running. Either way the server
                     // has dropped (or will drop) the session, so we must not run forever.
-                    failures++;
-                    if (failures >= _options.MaxHeartbeatFailures)
+                    if (++unanswered >= _options.MaxHeartbeatFailures)
                     {
-                        EndSession(PwfErrorCodes.NetworkLost,
-                            "Cannot reach the license server. Please check your connection and sign in again.");
+                        EndUnansweredSession(plainRefusals, clockRefusals, eventContext);
                         return;
                     }
                     continue;
                 }
 
-                failures = 0;
+                if (!beat.IsEnveloped)
+                {
+                    // A plain reply is a refusal (a plain success threw above). Shared IPs get
+                    // rate limited legitimately, so 429 has its own, larger budget.
+                    if (beat.StatusCode == TooManyRequests)
+                    {
+                        if (++rateLimited >= _options.MaxRateLimitedBeats)
+                        {
+                            EndSession(PwfErrorCodes.NetworkLost, NetworkLostMessage, eventContext);
+                            return;
+                        }
+                        continue;
+                    }
+
+                    plainRefusals++;
+                    if (IsClockRefusal(beat)) clockRefusals++;
+                    if (++unanswered >= _options.MaxHeartbeatFailures)
+                    {
+                        EndUnansweredSession(plainRefusals, clockRefusals, eventContext);
+                        return;
+                    }
+                    continue;
+                }
+
+                // Encrypted: the server is reachable and the clock is fine. Every count starts
+                // over — and neither kind of failure ever resets the other, so alternating
+                // them cannot keep the loop alive either.
+                unanswered = plainRefusals = clockRefusals = rateLimited = 0;
 
                 if (beat.Success) continue;
 
                 string? code = beat.ErrorCode;
                 if (PwfErrorCodes.EndsSession(code))
                 {
-                    EndSession(code!, beat.Message ?? "Your session has ended.");
+                    EndSession(code!, beat.Message ?? "Your session has ended.", eventContext);
                     return;
                 }
-                // Unknown non-success: treat as transient and keep beating.
+                // Unknown encrypted failure: transient, keep beating.
             }
         }
 
+        // The failure budget ran out. When every plain refusal in the streak was the server's
+        // replay check ("Request expired"), the clock is to blame — say so, since signing in
+        // again cannot work until it is corrected.
+        private void EndUnansweredSession(int plainRefusals, int clockRefusals, SynchronizationContext? eventContext)
+        {
+            if (plainRefusals > 0 && clockRefusals == plainRefusals)
+                EndSession(PwfErrorCodes.ClockSkew, ClockSkewMessage, eventContext);
+            else
+                EndSession(PwfErrorCodes.NetworkLost, NetworkLostMessage, eventContext);
+        }
+
+        private static bool IsClockRefusal(PwfResponse reply)
+        {
+            string? message = reply.Message;
+            return string.Equals(reply.ErrorCode, CryptoErrorCode, StringComparison.Ordinal)
+                && message != null
+                && message.IndexOf("expired", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
         /// <summary>
-        /// Closes the session server-side and frees the device seat. Safe to call when
+        /// Ends this session on the server and stops the heartbeat. Safe to call when
         /// already signed out.
         /// </summary>
         /// <param name="cancellationToken">Cancels the request.</param>
+        /// <remarks>
+        /// Logging out does not unbind the key: it stays bound to this machine, which can
+        /// sign in again at any time. To move the license to another computer, call
+        /// <see cref="ResetHardwareIdAsync"/>.
+        /// </remarks>
         public async Task<PwfResponse?> LogoutAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
             if (!IsSignedIn) return null;
@@ -344,8 +478,56 @@ namespace PWFAuth
         }
 
         /// <summary>
-        /// Queues a hardware-reset request for the owner to review — the flow for a
-        /// customer who changed machines.
+        /// Moves a license to a new PC, instantly and without waiting for the developer:
+        /// unbinds the key from every machine it is bound to so the next
+        /// <see cref="LoginAsync"/> binds it to this one. Subject to the application's
+        /// self-service policy and cooldown.
+        /// </summary>
+        /// <param name="licenseKey">The customer's key.</param>
+        /// <param name="reason">
+        /// Optional note stored with the reset, e.g. "New laptop". At most 255 characters
+        /// (longer text is cut); defaults to "Reset from app".
+        /// </param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <returns>
+        /// On success <see cref="PwfResponse.Message"/> confirms the reset and
+        /// <c>next_reset_at</c> (UTC, ISO 8601) says when the next one is allowed. On failure
+        /// <see cref="PwfResponse.ErrorCode"/> is <see cref="PwfErrorCodes.InvalidKey"/>,
+        /// <see cref="PwfErrorCodes.KeyNotActive"/>, <see cref="PwfErrorCodes.NoHwid"/>,
+        /// <see cref="PwfErrorCodes.RateLimited"/> (the message says how many hours to wait) or
+        /// <see cref="PwfErrorCodes.SelfResetDisabled"/>, and <see cref="PwfResponse.Message"/>
+        /// is safe to show the user.
+        /// </returns>
+        /// <remarks>
+        /// <para>
+        /// The typical flow: <see cref="LoginAsync"/> fails with
+        /// <see cref="PwfErrorCodes.HwidMismatch"/> or <see cref="PwfErrorCodes.DeviceLimit"/>,
+        /// the user confirms they want to move the license here, you call this method, then
+        /// call <see cref="LoginAsync"/> again.
+        /// </para>
+        /// <para>
+        /// The developer decides whether self-service resets are allowed for the application
+        /// and how long the cooldown between two resets is (12 hours by default). A reset
+        /// unbinds every device of the key and ends all of its sessions on the server — a
+        /// session this client holds on the same key included, which a running heartbeat then
+        /// reports through <see cref="SessionEnded"/>.
+        /// </para>
+        /// </remarks>
+        public Task<PwfResponse> ResetHardwareIdAsync(string licenseKey, string? reason = null,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(licenseKey)) throw new ArgumentException("License key is required.", nameof(licenseKey));
+            return PostPlainAsync("/api/customer/reset-hwid.php", new Dictionary<string, object?>
+            {
+                ["key"] = licenseKey.Trim(),
+                ["reason"] = ResetReason(reason),
+            }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Queues a hardware-reset request for the owner to review. Obsolete: the PWF Auth
+        /// dashboard does not show these requests yet, so nobody can approve one — use
+        /// <see cref="ResetHardwareIdAsync"/> for an instant self-service reset.
         /// </summary>
         /// <param name="licenseKey">The customer's key.</param>
         /// <param name="reason">What the customer says happened.</param>
@@ -354,6 +536,7 @@ namespace PWFAuth
         /// The reply is deliberately identical whether or not the key exists, so it cannot
         /// be used to probe which keys are real.
         /// </remarks>
+        [Obsolete("Reset requests are not shown in the PWF Auth dashboard yet. Use ResetHardwareIdAsync for an instant self-service reset.")]
         public Task<PwfResponse> RequestHardwareResetAsync(string licenseKey, string reason,
             CancellationToken cancellationToken = default(CancellationToken))
         {
@@ -441,15 +624,22 @@ namespace PWFAuth
         /// <param name="path">Endpoint path, e.g. "/api/auth/login.php".</param>
         /// <param name="body">Fields to send.</param>
         /// <param name="cancellationToken">Cancels the request.</param>
+        /// <remarks>
+        /// A plain JSON failure (a bad app secret, a rate limit) is returned as a failed
+        /// <see cref="PwfResponse"/> as usual; a plain JSON <em>success</em> is refused.
+        /// </remarks>
+        /// <exception cref="PwfSecurityException">
+        /// The reply was not encrypted but claimed success. These endpoints encrypt every
+        /// reply once the app secret is accepted, so it did not come from the license server.
+        /// </exception>
         public async Task<PwfResponse> PostEnvelopeAsync(string path, IDictionary<string, object?> body,
             CancellationToken cancellationToken = default(CancellationToken))
         {
             string payload = _crypto.Encrypt(SerializeBody(body));
-            using (var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + path))
+            using (HttpRequestMessage request = CreateRequest(HttpMethod.Post, path))
             {
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
-                request.Headers.TryAddWithoutValidation("X-App-Secret", _options.AppSecret);
-                return await SendAsync(request, cancellationToken).ConfigureAwait(false);
+                return await SendAsync(request, true, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -460,21 +650,28 @@ namespace PWFAuth
         /// <param name="path">Endpoint path, e.g. "/api/app/info.php".</param>
         /// <param name="bearerLicenseKey">License key, or null when not required.</param>
         /// <param name="cancellationToken">Cancels the request.</param>
+        /// <remarks>
+        /// A plain JSON failure is returned as a failed <see cref="PwfResponse"/>; a plain
+        /// JSON <em>success</em> is refused.
+        /// </remarks>
+        /// <exception cref="PwfSecurityException">
+        /// The reply was not encrypted but claimed success, so it did not come from the
+        /// license server.
+        /// </exception>
         public async Task<PwfResponse> GetEnvelopeAsync(string path, string? bearerLicenseKey = null,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            using (var request = new HttpRequestMessage(HttpMethod.Get, _baseUrl + path))
+            using (HttpRequestMessage request = CreateRequest(HttpMethod.Get, path))
             {
-                request.Headers.TryAddWithoutValidation("X-App-Secret", _options.AppSecret);
                 if (!string.IsNullOrEmpty(bearerLicenseKey))
                     request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + bearerLicenseKey);
-                return await SendAsync(request, cancellationToken).ConfigureAwait(false);
+                return await SendAsync(request, true, cancellationToken).ConfigureAwait(false);
             }
         }
 
         /// <summary>
         /// POST plain JSON — for the endpoints that do not speak the envelope (trials,
-        /// hardware-reset requests, user accounts).
+        /// hardware resets, user accounts).
         /// </summary>
         /// <param name="path">Endpoint path, e.g. "/api/auth/trial.php".</param>
         /// <param name="body">Fields to send.</param>
@@ -482,15 +679,24 @@ namespace PWFAuth
         public async Task<PwfResponse> PostPlainAsync(string path, IDictionary<string, object?> body,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            using (var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + path))
+            using (HttpRequestMessage request = CreateRequest(HttpMethod.Post, path))
             {
                 request.Content = new StringContent(SerializeBody(body), Encoding.UTF8, "application/json");
-                request.Headers.TryAddWithoutValidation("X-App-Secret", _options.AppSecret);
-                return await SendAsync(request, cancellationToken).ConfigureAwait(false);
+                return await SendAsync(request, false, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        private async Task<PwfResponse> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        // Headers go on each request, never on HttpClient.DefaultRequestHeaders: the
+        // HttpClient may be the caller's, shared with the rest of their application.
+        private HttpRequestMessage CreateRequest(HttpMethod method, string path)
+        {
+            var request = new HttpRequestMessage(method, _baseUrl + path);
+            request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+            request.Headers.TryAddWithoutValidation("X-App-Secret", _options.AppSecret);
+            return request;
+        }
+
+        private async Task<PwfResponse> SendAsync(HttpRequestMessage request, bool requireEnvelope, CancellationToken cancellationToken)
         {
             HttpResponseMessage httpResponse;
             try
@@ -516,13 +722,13 @@ namespace PWFAuth
 
                 if (CryptoEnvelope.LooksLikeEnvelope(raw))
                 {
-                    return PwfResponse.Parse(_crypto.Decrypt(raw));
+                    return PwfResponse.FromReply(_crypto.Decrypt(raw), true, status);
                 }
 
                 PwfResponse plain;
                 try
                 {
-                    plain = PwfResponse.Parse(raw);
+                    plain = PwfResponse.FromReply(raw, false, status);
                 }
                 catch (PwfException)
                 {
@@ -543,6 +749,17 @@ namespace PWFAuth
                         "License server returned HTTP " + status.ToString(CultureInfo.InvariantCulture) + ".",
                         Snippet(raw));
                 }
+
+                // Envelope endpoints encrypt EVERY reply once the request is verified; only
+                // refusals that happen before that point (bad secret, rate limit, wrong
+                // method, a clock too far off) travel as plain JSON, and those are all
+                // failures. A plain success therefore came from a proxy, a hosts-file
+                // redirect or a fake server — and accepting it would let any of them unlock
+                // the application.
+                if (requireEnvelope && plain.Success)
+                {
+                    throw new PwfSecurityException("The license server's reply was not encrypted, so it cannot be trusted.");
+                }
                 return plain;
             }
         }
@@ -557,20 +774,86 @@ namespace PWFAuth
             return raw.Length <= 200 ? raw : raw.Substring(0, 200);
         }
 
-        private void EndSession(string errorCode, string message)
+        private static string ResetReason(string? reason)
+        {
+            string text = string.IsNullOrWhiteSpace(reason) ? DefaultResetReason : reason!.Trim();
+            if (text.Length <= MaxResetReasonLength) return text;
+
+            // Never cut between the two halves of a surrogate pair (an emoji, say): a lone
+            // surrogate is invalid UTF-16 and makes the whole JSON body unreadable to PHP.
+            int length = MaxResetReasonLength;
+            if (char.IsHighSurrogate(text[length - 1])) length--;
+            return text.Substring(0, length);
+        }
+
+        private static string BuildUserAgent()
+        {
+            string version = string.Empty;
+            try
+            {
+                Assembly assembly = typeof(PwfClient).Assembly;
+                AssemblyInformationalVersionAttribute? info =
+                    assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+                if (info != null) version = info.InformationalVersion ?? string.Empty;
+                if (version.Length == 0)
+                {
+                    Version? assemblyVersion = assembly.GetName().Version;
+                    if (assemblyVersion != null) version = assemblyVersion.ToString(3);
+                }
+            }
+            catch (Exception)
+            {
+                // Reflection can be restricted in trimmed hosts; the header is informational only.
+            }
+
+            // Source Link appends "+<commit sha>" to the informational version.
+            int plus = version.IndexOf('+');
+            if (plus >= 0) version = version.Substring(0, plus);
+            if (version.Length == 0) version = "0.0.0";
+
+            return "PWFAuth-dotnet/" + version + " (+https://pwfauth.com)";
+        }
+
+        private void EndSession(string errorCode, string message, SynchronizationContext? eventContext)
         {
             SessionId = null;
+            var args = new SessionEndedEventArgs(errorCode, message);
+
+            if (eventContext != null)
+            {
+                int started = 0;
+                try
+                {
+                    eventContext.Post(_ =>
+                    {
+                        Interlocked.Exchange(ref started, 1);
+                        RaiseSessionEnded(args);
+                    }, null);
+                    return;
+                }
+                catch (Exception) when (Volatile.Read(ref started) == 0)
+                {
+                    // The captured context no longer accepts work — a WinForms UI thread
+                    // that has already shut down throws here. A lost event would leave the
+                    // app running unlicensed, so raise it right here instead.
+                }
+            }
+            RaiseSessionEnded(args);
+        }
+
+        private void RaiseSessionEnded(SessionEndedEventArgs args)
+        {
             EventHandler<SessionEndedEventArgs>? handler = SessionEnded;
             if (handler != null)
             {
-                handler(this, new SessionEndedEventArgs(errorCode, message));
+                handler(this, args);
             }
         }
 
         /// <summary>
-        /// Stops the heartbeat and releases the HTTP client. Call
-        /// <see cref="LogoutAsync"/> first if you want the device seat freed immediately
-        /// rather than at the server's session timeout.
+        /// Stops the heartbeat and releases the HTTP client. Call <see cref="LogoutAsync"/>
+        /// first to end the server session now rather than at the server's session timeout.
+        /// Neither one unbinds the key from this machine — see <see cref="ResetHardwareIdAsync"/>.
         /// </summary>
         public void Dispose()
         {

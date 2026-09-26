@@ -37,6 +37,28 @@ namespace PWFAuth
             }
         }
 
+        /// <summary>Parses a reply and records how it travelled.</summary>
+        /// <param name="json">The JSON body — decrypted already when it came in an envelope.</param>
+        /// <param name="enveloped">True when it came in an envelope that verified.</param>
+        /// <param name="statusCode">The HTTP status of the reply.</param>
+        internal static PwfResponse FromReply(string json, bool enveloped, int statusCode)
+        {
+            PwfResponse response = Parse(json);
+            response.IsEnveloped = enveloped;
+            response.StatusCode = statusCode;
+            return response;
+        }
+
+        /// <summary>
+        /// True when the reply came in an envelope that verified — something only the license
+        /// server (or a holder of the app secret) can produce. False for plain JSON and for
+        /// responses built with <see cref="Parse"/>.
+        /// </summary>
+        internal bool IsEnveloped { get; private set; }
+
+        /// <summary>The HTTP status of the reply; 0 for responses built with <see cref="Parse"/>.</summary>
+        internal int StatusCode { get; private set; }
+
         /// <summary>The raw JSON body exactly as the server sent it.</summary>
         public string RawJson { get; }
 

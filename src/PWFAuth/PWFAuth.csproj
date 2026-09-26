@@ -15,7 +15,7 @@
 
   <PropertyGroup>
     <PackageId>PWFAuth</PackageId>
-    <Version>1.0.0-preview.1</Version>
+    <Version>1.1.0</Version>
     <Authors>PWF Auth</Authors>
     <Company>PWF Auth</Company>
     <Product>PWF Auth .NET Client</Product>
@@ -29,7 +29,15 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) 2026 PWF Auth</Copyright>
-    <PackageReleaseNotes>First public preview. Session kill switch (ban/pause/expire/HWID-reset/maintenance) plus a consecutive-failure guard so an unreachable server ends the session instead of leaving the app running.</PackageReleaseNotes>
+    <PackageReleaseNotes>- New ResetHardwareIdAsync: instant self-service hardware-ID reset, so customers can move a license to a new PC themselves (subject to the app's policy and cooldown). RequestHardwareResetAsync is now [Obsolete]: the dashboard does not show those requests yet.
+- Security: the encrypted endpoints now reject a plain (unencrypted) reply that claims success with the new PwfSecurityException, so a proxy or fake server can no longer answer "success" for the license server. Plain failure replies are still returned as failed responses.
+- Security: the kill switch can no longer be dodged by changing the clock. The heartbeat used to shrug off plain refusals, including the server's replay check for a clock more than 5 minutes off, so a moved clock kept the app running and deaf to bans. Now only encrypted replies count as answers: MaxHeartbeatFailures beats in a row without one end the session with the new CLOCK_SKEW (clock to blame) or NETWORK_LOST. Plain HTTP 429 has its own budget, the new PwfClientOptions.MaxRateLimitedBeats (default 10).
+- SessionEnded is raised on the SynchronizationContext that started the heartbeat (the UI thread in WinForms/WPF). Opt out with PwfClientOptions.RaiseEventsOnCapturedContext = false.
+- Every request sends User-Agent: PWFAuth-dotnet/1.1.0 (+https://pwfauth.com).
+- New PwfErrorCodes: DeviceLimit, OpenAccessLimit, KeyNotActive, NoHwid, RateLimited, SelfResetDisabled, ClockSkew.
+- A caller-supplied HttpClient is no longer modified; set its Timeout yourself (PwfClientOptions.Timeout applies to the client's own HttpClient).
+- Docs: LogoutAsync ends the session but the key stays bound to the machine (earlier docs said it freed the device seat).
+Full history: https://github.com/pwfauth/pwfauth-dotnet/blob/main/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <PropertyGroup>

@@ -6,6 +6,6 @@
     <RestoreSources>$(RestoreSources);../../artifacts;https://api.nuget.org/v3/index.json</RestoreSources>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="PWFAuth" Version="1.0.0-preview.1" />
+    <PackageReference Include="PWFAuth" Version="1.1.0" />
   </ItemGroup>
 </Project>

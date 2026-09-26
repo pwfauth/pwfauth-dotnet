@@ -19,16 +19,25 @@ Namespace VbFrameworkTest
 
         Sub Main()
             Console.WriteLine("Runtime: " & System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription)
-            MainAsync().GetAwaiter().GetResult()
+
+            ' A test application's credentials — never committed; set them in the environment.
+            Dim secret As String = Environment.GetEnvironmentVariable("PWFAUTH_APP_SECRET")
+            Dim key As String = Environment.GetEnvironmentVariable("PWFAUTH_TEST_KEY")
+            If String.IsNullOrWhiteSpace(secret) OrElse String.IsNullOrWhiteSpace(key) Then
+                Console.Error.WriteLine("Set PWFAUTH_APP_SECRET (your test app's secret) and PWFAUTH_TEST_KEY (a license key of that app), then run again:")
+                Console.Error.WriteLine("  PowerShell:  $env:PWFAUTH_APP_SECRET = ""...""; $env:PWFAUTH_TEST_KEY = ""XXXXX-XXXXX-XXXXX-XXXXX""")
+                Console.Error.WriteLine("  cmd:         set PWFAUTH_APP_SECRET=...  and  set PWFAUTH_TEST_KEY=XXXXX-XXXXX-XXXXX-XXXXX")
+                Environment.Exit(2)
+                Return
+            End If
+
+            MainAsync(secret.Trim(), key.Trim()).GetAwaiter().GetResult()
             Console.WriteLine()
             Console.WriteLine("SUMMARY: " & Pass & " passed, " & Fail & " failed")
             Environment.Exit(If(Fail > 0, 1, 0))
         End Sub
 
-        Async Function MainAsync() As Task
-            Dim secret As String = "5473618231295399bfe82d13f99e2aaf3f5538635293cd91cc546ff96e908f6b"
-            Dim key As String = "GBB9A-46YPY-LV9FY-668HT"
-
+        Async Function MainAsync(secret As String, key As String) As Task
             Console.WriteLine("HardwareId: " & HardwareId.Get())
 
             Using client As New PwfClient(secret)
