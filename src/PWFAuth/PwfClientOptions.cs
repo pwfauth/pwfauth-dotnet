@@ -77,6 +77,21 @@ namespace PWFAuth
         public int MaxClockDriftSeconds { get; set; } = 300;
 
         /// <summary>
+        /// Repair a wrong system clock on its own. When the server refuses a request because this
+        /// machine's clock is more than five minutes off, it sends its own time with the refusal;
+        /// the client then shifts its timestamps by the difference and sends the request once
+        /// more. Defaults to true.
+        /// </summary>
+        /// <remarks>
+        /// The server's time in that refusal is not signed — the server could not verify the
+        /// request, so it answers in plain JSON. Whoever controls this machine's network could use
+        /// it to move the client's clock, which they can already do by changing the system clock.
+        /// Set this to false for the 1.1 behaviour: nothing works until the clock is corrected, and
+        /// the heartbeat ends the session with <see cref="PwfErrorCodes.ClockSkew"/>.
+        /// </remarks>
+        public bool AutoCorrectClock { get; set; } = true;
+
+        /// <summary>
         /// Raise <see cref="PwfClient.SessionEnded"/> through the
         /// <see cref="System.Threading.SynchronizationContext"/> that was current when the
         /// heartbeat was started — the UI thread in a WinForms or WPF app — so the handler can

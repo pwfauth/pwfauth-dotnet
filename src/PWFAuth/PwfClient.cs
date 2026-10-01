@@ -31,7 +31,7 @@ namespace PWFAuth
     /// </example>
     public sealed class PwfClient : IDisposable
     {
-        // Sent on every request, e.g. "PWFAuth-dotnet/1.1.0 (+https://pwfauth.com)".
+        // Sent on every request, e.g. "PWFAuth-dotnet/1.2.0 (+https://pwfauth.com)".
         private static readonly string UserAgent = BuildUserAgent();
 
         private const string DefaultResetReason = "Reset from app";
@@ -635,12 +635,40 @@ namespace PWFAuth
         public async Task<PwfResponse> PostEnvelopeAsync(string path, IDictionary<string, object?> body,
             CancellationToken cancellationToken = default(CancellationToken))
         {
+            PwfResponse reply = await PostEnvelopeOnceAsync(path, body, cancellationToken).ConfigureAwait(false);
+            // A wrong clock on this machine: the server refused the timestamp and sent its own
+            // time. Shift ours by the difference and send once more, freshly stamped.
+            if (_options.AutoCorrectClock && TryCorrectClock(reply))
+                reply = await PostEnvelopeOnceAsync(path, body, cancellationToken).ConfigureAwait(false);
+            return reply;
+        }
+
+        private async Task<PwfResponse> PostEnvelopeOnceAsync(string path, IDictionary<string, object?> body,
+            CancellationToken cancellationToken)
+        {
             string payload = _crypto.Encrypt(SerializeBody(body));
             using (HttpRequestMessage request = CreateRequest(HttpMethod.Post, path))
             {
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
                 return await SendAsync(request, true, cancellationToken).ConfigureAwait(false);
             }
+        }
+
+        // The server's plain refusal for a timestamp outside its window carries
+        // "reason": "CLOCK_SKEW" and "server_time" (unix seconds). Only a plain reply qualifies:
+        // the server never sends that refusal encrypted.
+        private bool TryCorrectClock(PwfResponse reply)
+        {
+            JsonElement reason, serverTime;
+            long seconds;
+            if (reply.IsEnveloped
+                || !reply.TryGetProperty("reason", out reason) || reason.ValueKind != JsonValueKind.String
+                || !string.Equals(reason.GetString(), PwfErrorCodes.ClockSkew, StringComparison.Ordinal)
+                || !reply.TryGetProperty("server_time", out serverTime) || serverTime.ValueKind != JsonValueKind.Number
+                || !serverTime.TryGetInt64(out seconds) || seconds <= 0)
+                return false;
+            _crypto.ClockOffsetSeconds = seconds - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            return true;
         }
 
         /// <summary>

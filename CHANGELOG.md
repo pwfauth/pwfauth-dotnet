@@ -3,6 +3,28 @@
 All notable changes to the [`PWFAuth`](https://www.nuget.org/packages/PWFAuth) package.
 Versions follow [semantic versioning](https://semver.org).
 
+## 1.2.0 — 2026-10-01
+
+### Added
+
+- A wrong system clock repairs itself. When a request's timestamp is more than five minutes
+  off, the server's plain `CRYPTO_ERROR` refusal now also carries `"reason": "CLOCK_SKEW"` and
+  `server_time`. The client shifts its timestamps by the difference
+  (`CryptoEnvelope.ClockOffsetSeconds`) and sends the request once more, so signing in and the
+  heartbeat work on a PC whose date or time is wrong. Only one retry per call, and only for a
+  plain reply.
+- `PwfClientOptions.AutoCorrectClock` (default `true`). Set it to `false` for the 1.1
+  behaviour: nothing works until the clock is corrected, and the heartbeat ends the session
+  with `CLOCK_SKEW`. The server's time in the refusal is not signed, so whoever controls the
+  machine's network can move the client's clock with it — as they can by changing the system
+  clock.
+- `CryptoEnvelope.ClockOffsetSeconds`: the shift applied when stamping requests and checking
+  replies.
+
+### Changed
+
+- `User-Agent: PWFAuth-dotnet/1.2.0 (+https://pwfauth.com)`.
+
 ## 1.1.0 — 2026-09-26
 
 ### Added
