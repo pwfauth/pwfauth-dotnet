@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 
 namespace PWFAuth
 {
@@ -20,6 +21,23 @@ namespace PWFAuth
         private readonly byte[] _encKey;
         private readonly byte[] _macKey;
         private readonly int _maxDriftSeconds;
+        private long _clockOffsetSeconds;   // Interlocked: a long is not atomic on 32-bit
+
+        /// <summary>
+        /// Seconds added to this machine's clock when stamping requests and checking replies.
+        /// <see cref="PwfClient"/> sets it from the server's own time when the server refuses a
+        /// request because this machine's clock is wrong (see <see cref="PwfClientOptions.AutoCorrectClock"/>).
+        /// </summary>
+        public long ClockOffsetSeconds
+        {
+            get { return Interlocked.Read(ref _clockOffsetSeconds); }
+            set { Interlocked.Exchange(ref _clockOffsetSeconds, value); }
+        }
+
+        private long Now()
+        {
+            return DateTimeOffset.UtcNow.ToUnixTimeSeconds() + ClockOffsetSeconds;
+        }
 
         /// <summary>Builds the envelope codec for one application secret.</summary>
         /// <param name="appSecret">The 64-character hex secret from your dashboard.</param>
@@ -69,7 +87,7 @@ namespace PWFAuth
             Buffer.BlockCopy(cipher, 0, combined, iv.Length, cipher.Length);
 
             string p = Convert.ToBase64String(combined);
-            long t = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            long t = Now();
             string s = HmacHex(p + t.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
             using (var stream = new System.IO.MemoryStream())
@@ -116,7 +134,7 @@ namespace PWFAuth
                 throw new PwfCryptoException("HMAC verification failed — wrong app secret, or the payload was tampered with.");
             }
 
-            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            long now = Now();
             if (Math.Abs(now - t) > _maxDriftSeconds)
             {
                 throw new PwfCryptoException(

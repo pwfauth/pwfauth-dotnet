@@ -11,6 +11,14 @@ dotnet add package PWFAuth
 Targets **netstandard2.0** (works on .NET Framework 4.6.2+, so WinForms/WPF and VB.NET
 desktop apps are first-class) and **net8.0**.
 
+## What's new in 1.2.0
+
+* **A wrong system clock repairs itself.** The server refuses a request whose timestamp is
+  more than five minutes off, and now sends its own time with the refusal. The client shifts
+  its timestamps by the difference and sends the request once more, so signing in and the
+  heartbeat work on a PC whose date or time is wrong — no more "check your clock" support
+  tickets. Opt out with `PwfClientOptions.AutoCorrectClock = false`.
+
 ## What's new in 1.1.0
 
 * **`ResetHardwareIdAsync`** — customers move their license to a new PC themselves,
@@ -103,6 +111,12 @@ asks the user to correct the date and time (other plain refusals end it with
 `NETWORK_LOST`). Plain `429 Too Many Requests` replies get a larger budget,
 `MaxRateLimitedBeats` (10 by default), so users behind a busy shared IP are not signed out
 within a minute — but a proxy answering 429 forever still ends the session.
+
+Since 1.2.0 the client first tries to repair the clock: the server's refusal carries its own
+time, the client shifts its timestamps by the difference and sends the beat once more
+(`AutoCorrectClock`, on by default). Bans still arrive, because the corrected beat gets a
+real, encrypted answer. A session ends with `CLOCK_SKEW` only when that does not help, or
+with `AutoCorrectClock = false`.
 
 ## WinForms: SessionEnded on the UI thread
 
@@ -391,7 +405,7 @@ var client = new PwfClient(new PwfClientOptions
 
 ## Network details
 
-Every request carries `User-Agent: PWFAuth-dotnet/1.1.0 (+https://pwfauth.com)` — the
+Every request carries `User-Agent: PWFAuth-dotnet/1.2.0 (+https://pwfauth.com)` — the
 version follows the package — so SDK traffic is easy to tell apart in logs and firewalls.
 Headers are set on each request, never on the `HttpClient`. One you pass to
 `new PwfClient(options, httpClient)` (from `IHttpClientFactory`, or with a proxy
