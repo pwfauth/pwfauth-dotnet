@@ -31,7 +31,7 @@ namespace PWFAuth
     /// </example>
     public sealed class PwfClient : IDisposable
     {
-        // Sent on every request, e.g. "PWFAuth-dotnet/1.2.0 (+https://pwfauth.com)".
+        // Sent on every request, e.g. "PWFAuth-dotnet/1.3.0 (+https://pwfauth.com)".
         private static readonly string UserAgent = BuildUserAgent();
 
         private const string DefaultResetReason = "Reset from app";
@@ -612,6 +612,95 @@ namespace PWFAuth
                 ["username"] = username,
                 ["current_password"] = currentPassword,
                 ["new_password"] = newPassword,
+            }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Registers an end-user account with a license key: the account gets the key's time
+        /// and device limit, and the key is used up (it can no longer sign in on its own, and
+        /// <see cref="LoginAsync"/> with it answers <see cref="PwfErrorCodes.KeyRedeemed"/>).
+        /// Required when the application turned on "Sign-up needs a license key" in App
+        /// Settings; <see cref="RegisterAccountAsync"/> then fails with <see cref="PwfErrorCodes.KeyRequired"/>.
+        /// </summary>
+        /// <param name="username">Desired username, unique per application.</param>
+        /// <param name="password">Password; stored hashed server-side.</param>
+        /// <param name="licenseKey">An unused license key of this application.</param>
+        /// <param name="email">Contact e-mail.</param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <remarks>
+        /// The reply's <c>user</c> object carries <c>expires_at</c>, <c>days_remaining</c> and
+        /// <c>max_devices</c>. Refusals: <see cref="PwfErrorCodes.InvalidKey"/>,
+        /// <see cref="PwfErrorCodes.KeyAlreadyUsed"/>, <see cref="PwfErrorCodes.KeyInUse"/>,
+        /// <see cref="PwfErrorCodes.Banned"/>, <see cref="PwfErrorCodes.Paused"/>,
+        /// <see cref="PwfErrorCodes.Expired"/>, <see cref="PwfErrorCodes.UsernameExists"/>.
+        /// </remarks>
+        public Task<PwfResponse> RegisterAccountWithKeyAsync(string username, string password, string licenseKey,
+            string? email = null, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username is required.", nameof(username));
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password is required.", nameof(password));
+            if (string.IsNullOrWhiteSpace(licenseKey)) throw new ArgumentException("License key is required.", nameof(licenseKey));
+            return PostPlainAsync("/api/auth/account-register.php", new Dictionary<string, object?>
+            {
+                ["username"] = username,
+                ["password"] = password,
+                ["email"] = email ?? string.Empty,
+                ["license_key"] = licenseKey.Trim(),
+            }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Adds a license key's time to an existing account, and uses the key up. Works while
+        /// the account has expired too, when it cannot sign in. The application's settings
+        /// decide whether the time goes on top of the time left or starts from now, and
+        /// whether the account takes the key's device limit.
+        /// </summary>
+        /// <param name="username">Account username.</param>
+        /// <param name="password">Account password.</param>
+        /// <param name="licenseKey">An unused license key of this application.</param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <remarks>
+        /// The reply carries <c>days_added</c>, <c>lifetime</c>, <c>expires_at</c>,
+        /// <c>days_remaining</c> and <c>max_devices</c>. Refusals:
+        /// <see cref="PwfErrorCodes.InvalidCredentials"/>, <see cref="PwfErrorCodes.InvalidKey"/>,
+        /// <see cref="PwfErrorCodes.KeyAlreadyUsed"/>, <see cref="PwfErrorCodes.KeyInUse"/>,
+        /// <see cref="PwfErrorCodes.Banned"/>, <see cref="PwfErrorCodes.Paused"/>,
+        /// <see cref="PwfErrorCodes.AlreadyLifetime"/>. Wrong passwords and unknown keys count
+        /// toward the sign-in lockout (HTTP 429).
+        /// </remarks>
+        public Task<PwfResponse> RedeemKeyAsync(string username, string password, string licenseKey,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username is required.", nameof(username));
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password is required.", nameof(password));
+            if (string.IsNullOrWhiteSpace(licenseKey)) throw new ArgumentException("License key is required.", nameof(licenseKey));
+            return PostPlainAsync("/api/auth/account-redeem.php", new Dictionary<string, object?>
+            {
+                ["username"] = username,
+                ["password"] = password,
+                ["license_key"] = licenseKey.Trim(),
+            }, cancellationToken);
+        }
+
+        /// <summary>
+        /// Adds a license key's time to the account signed in with <see cref="AccountLoginAsync"/>,
+        /// through its session — no password needed. See the other overload for the rules.
+        /// </summary>
+        /// <param name="licenseKey">An unused license key of this application.</param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <exception cref="InvalidOperationException">No session: call <see cref="AccountLoginAsync"/> first.</exception>
+        /// <remarks>A session opened with <see cref="LoginAsync"/> (a license key, not an account) is refused with <see cref="PwfErrorCodes.SessionExpired"/>.</remarks>
+        public Task<PwfResponse> RedeemKeyAsync(string licenseKey,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(licenseKey)) throw new ArgumentException("License key is required.", nameof(licenseKey));
+            string? session = SessionId;
+            if (string.IsNullOrEmpty(session))
+                throw new InvalidOperationException("No account is signed in. Call AccountLoginAsync first, or pass the username and password.");
+            return PostPlainAsync("/api/auth/account-redeem.php", new Dictionary<string, object?>
+            {
+                ["session_id"] = session,
+                ["license_key"] = licenseKey.Trim(),
             }, cancellationToken);
         }
 

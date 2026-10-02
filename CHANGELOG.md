@@ -3,6 +3,28 @@
 All notable changes to the [`PWFAuth`](https://www.nuget.org/packages/PWFAuth) package.
 Versions follow [semantic versioning](https://semver.org).
 
+## 1.3.0 — 2026-10-02
+
+### Added
+
+- `PwfClient.RegisterAccountWithKeyAsync(username, password, licenseKey, email)` — creates an
+  account with a license key (`POST /api/auth/account-register.php` with `license_key`). The
+  account gets the key's time and device limit, and the key is used up: it turns `redeemed`
+  and can no longer sign in on its own. Required when the application turned on "Sign-up needs
+  a license key"; `RegisterAccountAsync` then fails with `KEY_REQUIRED`.
+- `PwfClient.RedeemKeyAsync(username, password, licenseKey)` and
+  `PwfClient.RedeemKeyAsync(licenseKey)` (the account signed in with `AccountLoginAsync`) —
+  add a key's time to an account (`POST /api/auth/account-redeem.php`), also after it has
+  expired. The application decides whether the time goes on top of the time left or starts
+  from now, and whether the account takes the key's device limit. Banning a used key in the
+  dashboard takes its time back.
+- `PwfErrorCodes`: `KeyRequired`, `KeyAlreadyUsed`, `KeyInUse`, `KeyRedeemed`,
+  `AlreadyLifetime`, `UsernameExists`.
+
+### Changed
+
+- `User-Agent: PWFAuth-dotnet/1.3.0 (+https://pwfauth.com)`.
+
 ## 1.2.0 — 2026-10-01
 
 ### Added
