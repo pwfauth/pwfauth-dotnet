@@ -64,6 +64,19 @@ namespace PWFAuth
         /// <summary>The developer has turned self-service hardware resets off for this application.</summary>
         public const string SelfResetDisabled = "SELF_RESET_DISABLED";
 
+        /// <summary>The application requires a license key to create an account: use <see cref="PwfClient.RegisterAccountWithKeyAsync"/>.</summary>
+        public const string KeyRequired = "KEY_REQUIRED";
+        /// <summary>The key was already added to an account (by sign-up or <see cref="PwfClient.RedeemKeyAsync(string, string, string, System.Threading.CancellationToken)"/>).</summary>
+        public const string KeyAlreadyUsed = "KEY_ALREADY_USED";
+        /// <summary>The key has already been activated by a license login, so it cannot be added to an account.</summary>
+        public const string KeyInUse = "KEY_IN_USE";
+        /// <summary>From <see cref="PwfClient.LoginAsync"/>: the key was added to an account; sign in with that account instead.</summary>
+        public const string KeyRedeemed = "KEY_REDEEMED";
+        /// <summary>The account already has lifetime access, so a key would add nothing.</summary>
+        public const string AlreadyLifetime = "ALREADY_LIFETIME";
+        /// <summary>Account sign-up: the username is taken in this application.</summary>
+        public const string UsernameExists = "USERNAME_EXISTS";
+
         /// <summary>
         /// Raised by the client (never by the server) when the license server has not
         /// answered <see cref="PwfClientOptions.MaxHeartbeatFailures"/> beats in a row — no

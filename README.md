@@ -11,6 +11,15 @@ dotnet add package PWFAuth
 Targets **netstandard2.0** (works on .NET Framework 4.6.2+, so WinForms/WPF and VB.NET
 desktop apps are first-class) and **net8.0**.
 
+## What's new in 1.3.0
+
+* **Sign up with a license key, and add keys to extend an account.** `RegisterAccountWithKeyAsync`
+  creates an account from a key (it gets the key's time and device limit), and `RedeemKeyAsync`
+  adds another key's time to an existing account, even after it has expired. See
+  *Accounts that run on license keys* below.
+* New `PwfErrorCodes`: `KeyRequired`, `KeyAlreadyUsed`, `KeyInUse`, `KeyRedeemed`,
+  `AlreadyLifetime`, `UsernameExists`.
+
 ## What's new in 1.2.0
 
 * **A wrong system clock repairs itself.** The server refuses a request whose timestamp is
@@ -347,6 +356,40 @@ out at its next heartbeat.
 Logging out is not a reset: `LogoutAsync` ends the session, but the key stays bound to the
 machine.
 
+## Accounts that run on license keys
+
+Customers buy a key, create an account with it, and later add more keys to the same account
+to extend it: one username and password, no pile of keys to keep. Turn on **Sign-up needs a
+license key** in App Settings > Account sign-up to make the key mandatory at sign-up.
+
+```csharp
+// Sign up: the account gets the key's time and device limit; the key is used up.
+var signup = await client.RegisterAccountWithKeyAsync("alice", "s3cret-pass", key, "alice@example.com");
+if (!signup.Success) { Console.WriteLine(signup.Message); return; }
+
+// Later: add another key, with the password (works even if the account has expired) ...
+var added = await client.RedeemKeyAsync("alice", "s3cret-pass", newKey);
+
+// ... or from a program that is signed in with AccountLoginAsync.
+var added2 = await client.RedeemKeyAsync(newKey);
+Console.WriteLine(added.Message);                    // "Key added: +30 days. ..."
+Console.WriteLine(added.GetInt32("days_remaining", 0));
+```
+
+In App Settings you choose whether a key's time goes **on top of the time left** or
+**starts again from now**, and whether the account **keeps its own device limit** or
+**takes the key's**. A used key cannot sign in on its own (`LoginAsync` answers
+`KEY_REDEEMED`), and banning it in the dashboard takes its time back from the account.
+
+| Code | Meaning |
+| --- | --- |
+| `KEY_REQUIRED` | This application only creates accounts with a key |
+| `KEY_ALREADY_USED` | The key was already added to an account |
+| `KEY_IN_USE` | The key was activated by a license login, so it cannot go to an account |
+| `INVALID_KEY` | No such key for this application |
+| `ALREADY_LIFETIME` | The account already has lifetime access |
+| `INVALID_CREDENTIALS` | Wrong username or password (counts toward the sign-in lockout) |
+
 ## What else it does
 
 ```csharp
@@ -361,7 +404,9 @@ await client.LogoutAsync();                           // end the session; the ke
 
 // User accounts (the username/password half of the platform)
 await client.RegisterAccountAsync("alice", "s3cret", "alice@example.com");
+await client.RegisterAccountWithKeyAsync("bob", "s3cret", key);   // account from a license key
 await client.AccountLoginAsync("alice", "s3cret");
+await client.RedeemKeyAsync("alice", "s3cret", newKey);           // add a key's time to the account
 ```
 
 Endpoints this client does not wrap yet are still reachable — `PostEnvelopeAsync`,
@@ -405,7 +450,7 @@ var client = new PwfClient(new PwfClientOptions
 
 ## Network details
 
-Every request carries `User-Agent: PWFAuth-dotnet/1.2.0 (+https://pwfauth.com)` — the
+Every request carries `User-Agent: PWFAuth-dotnet/1.3.0 (+https://pwfauth.com)` — the
 version follows the package — so SDK traffic is easy to tell apart in logs and firewalls.
 Headers are set on each request, never on the `HttpClient`. One you pass to
 `new PwfClient(options, httpClient)` (from `IHttpClientFactory`, or with a proxy
