@@ -13,13 +13,17 @@ namespace PWFAuth
     }
 
     /// <summary>
-    /// The license server answered, but not with a usable body — a proxy/CDN error page,
-    /// an empty response, or a failing status with no API payload. The most common cause
-    /// is a wrong base URL, which is why the status code is surfaced rather than swallowed.
+    /// No usable reply from the license server. Either it could not be reached at all —
+    /// no connection, DNS, a firewall, a proxy, TLS, or no answer in time — and
+    /// <see cref="StatusCode"/> is 0 (the network error is the
+    /// <see cref="Exception.InnerException"/>); or it answered, but not with a usable
+    /// body — a proxy/CDN error page, an empty response, or a failing status with no API
+    /// payload. The most common cause of the latter is a wrong base URL, which is why the
+    /// status code is surfaced rather than swallowed.
     /// </summary>
     public class PwfHttpException : PwfException
     {
-        /// <summary>The HTTP status code the server returned.</summary>
+        /// <summary>The HTTP status code the server returned; 0 when there was no reply at all.</summary>
         public int StatusCode { get; }
 
         /// <summary>The first part of the response body, for diagnostics.</summary>
@@ -28,6 +32,14 @@ namespace PWFAuth
         /// <summary>Creates the exception.</summary>
         public PwfHttpException(int statusCode, string message, string responseSnippet)
             : base(message)
+        {
+            StatusCode = statusCode;
+            ResponseSnippet = responseSnippet ?? string.Empty;
+        }
+
+        /// <summary>Creates the exception with the underlying network error.</summary>
+        public PwfHttpException(int statusCode, string message, string responseSnippet, Exception innerException)
+            : base(message, innerException)
         {
             StatusCode = statusCode;
             ResponseSnippet = responseSnippet ?? string.Empty;

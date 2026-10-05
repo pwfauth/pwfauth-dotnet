@@ -15,7 +15,7 @@
 
   <PropertyGroup>
     <PackageId>PWFAuth</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <Authors>PWF Auth</Authors>
     <Company>PWF Auth</Company>
     <Product>PWF Auth .NET Client</Product>
@@ -29,10 +29,10 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) 2026 PWF Auth</Copyright>
-    <PackageReleaseNotes>- RegisterAccountWithKeyAsync(username, password, licenseKey, email): create an account with a license key; the account gets the key's time and device limit and the key is used up.
-- RedeemKeyAsync(username, password, licenseKey) and RedeemKeyAsync(licenseKey) for the signed-in account: add a key's time to an account, also after it has expired.
-- New PwfErrorCodes: KeyRequired, KeyAlreadyUsed, KeyInUse, KeyRedeemed, AlreadyLifetime, UsernameExists.
-- Every request sends User-Agent: PWFAuth-dotnet/1.3.0 (+https://pwfauth.com).
+    <PackageReleaseNotes>- A request that gets no reply at all (no connection, DNS, a firewall, a proxy, TLS) now throws PwfHttpException with StatusCode 0 and the network error as InnerException, as documented. 1.3.0 let the raw HttpRequestException through.
+- LogoutAsync returns null when the server cannot be reached, as documented, instead of throwing.
+- A connection that drops while the reply is read is a PwfHttpException too.
+- User-Agent: PWFAuth-dotnet/1.3.1 (+https://pwfauth.com).
 Full history: https://github.com/pwfauth/pwfauth-dotnet/blob/main/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Net.Http;
 using System.Reflection;
 using System.Text;
@@ -820,15 +821,32 @@ namespace PWFAuth
             {
                 httpResponse = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
-                throw new PwfHttpException(0, "The license server did not respond in time.", string.Empty);
+                throw new PwfHttpException(0, "The license server did not respond in time.", string.Empty, ex);
+            }
+            catch (HttpRequestException ex)
+            {
+                // No reply at all: offline, DNS, a firewall, a proxy or TLS. Until 1.3.1 this
+                // escaped as a raw HttpRequestException, so code catching PwfHttpException (as
+                // documented) missed it, and LogoutAsync threw instead of returning null.
+                throw new PwfHttpException(0, "Cannot reach the license server: " + ex.Message, string.Empty, ex);
             }
 
             using (httpResponse)
             {
                 int status = (int)httpResponse.StatusCode;
-                string raw = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                string raw;
+                try
+                {
+                    raw = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is HttpRequestException || ex is IOException)
+                {
+                    // The connection dropped while the reply was being read.
+                    throw new PwfHttpException(status,
+                        "The connection to the license server dropped while reading its reply.", string.Empty, ex);
+                }
 
                 if (string.IsNullOrWhiteSpace(raw))
                 {

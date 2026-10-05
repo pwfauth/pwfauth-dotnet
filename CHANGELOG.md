@@ -3,6 +3,26 @@
 All notable changes to the [`PWFAuth`](https://www.nuget.org/packages/PWFAuth) package.
 Versions follow [semantic versioning](https://semver.org).
 
+## 1.3.1 — 2026-10-05
+
+### Fixed
+
+- A request that gets no reply at all — no connection, DNS, a firewall, a proxy or TLS — now
+  throws `PwfHttpException` with `StatusCode` 0 and the network error as `InnerException`, as
+  the documentation always said. 1.3.0 let the raw `HttpRequestException` through, so an app
+  that caught `PwfHttpException` (or `PwfException`) for "the server could not be reached"
+  crashed instead when the PC was offline.
+- `LogoutAsync` returns `null` when the server cannot be reached, as documented, instead of
+  throwing `HttpRequestException`. The local session ends either way.
+- A connection that drops while the reply is being read is a `PwfHttpException` too.
+- A timeout keeps its `PwfHttpException` (`StatusCode` 0) and now carries the cancellation as
+  `InnerException`. Cancelling through your own `CancellationToken` still throws
+  `OperationCanceledException`, unchanged.
+
+### Changed
+
+- `User-Agent: PWFAuth-dotnet/1.3.1 (+https://pwfauth.com)`.
+
 ## 1.3.0 — 2026-10-02
 
 ### Added

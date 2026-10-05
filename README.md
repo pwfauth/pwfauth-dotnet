@@ -11,6 +11,13 @@ dotnet add package PWFAuth
 Targets **netstandard2.0** (works on .NET Framework 4.6.2+, so WinForms/WPF and VB.NET
 desktop apps are first-class) and **net8.0**.
 
+## What's new in 1.3.1
+
+* **No connection is a `PwfHttpException`.** Offline, DNS, a firewall, a proxy or TLS: the
+  call throws `PwfHttpException` with `StatusCode` 0 and the network error as `InnerException`.
+  1.3.0 let the raw `HttpRequestException` through. `LogoutAsync` now returns `null` in that
+  case, as documented, instead of throwing.
+
 ## What's new in 1.3.0
 
 * **Sign up with a license key, and add keys to extend an account.** `RegisterAccountWithKeyAsync`
@@ -450,7 +457,12 @@ var client = new PwfClient(new PwfClientOptions
 
 ## Network details
 
-Every request carries `User-Agent: PWFAuth-dotnet/1.3.0 (+https://pwfauth.com)` — the
+Every failure to get a usable reply is a `PwfHttpException`. `StatusCode` 0 means no reply at
+all (no connection, DNS, a firewall, a proxy, TLS, or no answer within `Timeout`); the network
+error is the `InnerException`. Any other value is the HTTP status of a reply that was not the
+API's JSON (a CDN error page, a wrong base URL).
+
+Every request carries `User-Agent: PWFAuth-dotnet/1.3.1 (+https://pwfauth.com)` — the
 version follows the package — so SDK traffic is easy to tell apart in logs and firewalls.
 Headers are set on each request, never on the `HttpClient`. One you pass to
 `new PwfClient(options, httpClient)` (from `IHttpClientFactory`, or with a proxy
