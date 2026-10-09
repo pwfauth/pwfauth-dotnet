@@ -15,7 +15,7 @@
 
   <PropertyGroup>
     <PackageId>PWFAuth</PackageId>
-    <Version>1.3.1</Version>
+    <Version>1.4.0</Version>
     <Authors>PWF Auth</Authors>
     <Company>PWF Auth</Company>
     <Product>PWF Auth .NET Client</Product>
@@ -29,11 +29,7 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) 2026 PWF Auth</Copyright>
-    <PackageReleaseNotes>- A request that gets no reply at all (no connection, DNS, a firewall, a proxy, TLS) now throws PwfHttpException with StatusCode 0 and the network error as InnerException, as documented. 1.3.0 let the raw HttpRequestException through.
-- LogoutAsync returns null when the server cannot be reached, as documented, instead of throwing.
-- A connection that drops while the reply is read is a PwfHttpException too.
-- User-Agent: PWFAuth-dotnet/1.3.1 (+https://pwfauth.com).
-Full history: https://github.com/pwfauth/pwfauth-dotnet/blob/main/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>Pin the production HTTPS origin, reject redirects in the default transport, and independently verify every server reply with RSA-SHA256 and a fresh request nonce. Reject unsigned, forged, tampered and replayed replies before parsing. Existing custom endpoints are no longer supported. See CHANGELOG.md for migration details.</PackageReleaseNotes>
   </PropertyGroup>
 
   <PropertyGroup>

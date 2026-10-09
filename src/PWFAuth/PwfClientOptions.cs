@@ -21,7 +21,7 @@ namespace PWFAuth
         /// </remarks>
         public string AppSecret { get; set; } = string.Empty;
 
-        /// <summary>The API origin. Defaults to <c>https://pwfauth.com</c>.</summary>
+        /// <summary>The API origin. Must be <c>https://pwfauth.com</c>; other origins are rejected.</summary>
         public string BaseUrl { get; set; } = "https://pwfauth.com";
 
         /// <summary>
@@ -46,8 +46,8 @@ namespace PWFAuth
         /// when the server refused them because this computer's clock is wrong. Defaults to 3.
         /// </summary>
         /// <remarks>
-        /// Only an encrypted reply counts as an answer, because nothing but the license server
-        /// can produce one. No reply, a reply that fails verification and a plain refusal all
+        /// After independent signature verification, only an encrypted session reply
+        /// counts as an answer. No reply, a reply that fails verification and a plain refusal all
         /// count as unanswered (plain HTTP 429 has its own budget,
         /// <see cref="MaxRateLimitedBeats"/>). Do not set this to a very large number. The
         /// server drops the session on its own timeout regardless; if the client keeps running
@@ -83,11 +83,7 @@ namespace PWFAuth
         /// more. Defaults to true.
         /// </summary>
         /// <remarks>
-        /// The server's time in that refusal is not signed — the server could not verify the
-        /// request, so it answers in plain JSON. Whoever controls this machine's network could use
-        /// it to move the client's clock, which they can already do by changing the system clock.
-        /// Set this to false for the 1.1 behaviour: nothing works until the clock is corrected, and
-        /// the heartbeat ends the session with <see cref="PwfErrorCodes.ClockSkew"/>.
+        /// Clock correction uses only replies authenticated by the pinned server signing key.
         /// </remarks>
         public bool AutoCorrectClock { get; set; } = true;
 
@@ -111,6 +107,7 @@ namespace PWFAuth
                 throw new ArgumentException("AppSecret is required — copy it from Dashboard → App Settings.", nameof(AppSecret));
             if (string.IsNullOrWhiteSpace(BaseUrl))
                 throw new ArgumentException("BaseUrl is required.", nameof(BaseUrl));
+            ServerAuth.ValidateOrigin(BaseUrl);
             Uri? parsed;
             if (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out parsed))
                 throw new ArgumentException("BaseUrl must be an absolute URL, e.g. https://pwfauth.com", nameof(BaseUrl));

@@ -80,7 +80,7 @@ namespace PWFAuth
             _ownsHttpClient = httpClient == null;
             // A caller's HttpClient is left alone: setting Timeout throws once it has sent a
             // request, and the caller may depend on the value it already has.
-            _http = httpClient ?? new HttpClient { Timeout = options.Timeout };
+            _http = httpClient ?? new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = options.Timeout };
             HardwareId = string.IsNullOrWhiteSpace(options.HardwareId)
                 ? PWFAuth.HardwareId.Get()
                 : options.HardwareId!;
@@ -252,8 +252,8 @@ namespace PWFAuth
 
         private async Task HeartbeatLoopAsync(SynchronizationContext? eventContext, CancellationToken cancellationToken)
         {
-            // Only an encrypted reply proves the license server answered — nothing else can
-            // seal one. Every other outcome is an unanswered beat: no reply, a reply that fails
+            // After signature verification, require an encrypted session reply.
+            // A signed plain refusal cannot confirm that the session is active. Every other outcome is an unanswered beat: no reply, a reply that fails
             // verification, a forged plain "success" (PwfSecurityException), and plain
             // refusals, which the server sends when it cannot verify the request at all. The
             // commonest of those is its replay check rejecting a clock more than five minutes
@@ -808,6 +808,7 @@ namespace PWFAuth
         // HttpClient may be the caller's, shared with the rest of their application.
         private HttpRequestMessage CreateRequest(HttpMethod method, string path)
         {
+            ServerAuth.ValidatePath(path);
             var request = new HttpRequestMessage(method, _baseUrl + path);
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
             request.Headers.TryAddWithoutValidation("X-App-Secret", _options.AppSecret);
@@ -816,6 +817,13 @@ namespace PWFAuth
 
         private async Task<PwfResponse> SendAsync(HttpRequestMessage request, bool requireEnvelope, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            string nonce = ServerAuth.Nonce();
+            request.Headers.Remove("X-PWF-Nonce");
+            request.Headers.TryAddWithoutValidation("X-PWF-Nonce", nonce);
+            byte[] requestBody = request.Content == null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            string method = request.Method.Method;
+            string path = request.RequestUri!.AbsolutePath;
             HttpResponseMessage httpResponse;
             try
             {
@@ -839,7 +847,11 @@ namespace PWFAuth
                 string raw;
                 try
                 {
-                    raw = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    byte[] body = await httpResponse.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                    System.Collections.Generic.IEnumerable<string>? signatures;
+                    string signature = httpResponse.Headers.TryGetValues("X-PWF-Signature", out signatures) ? string.Join("", signatures!) : string.Empty;
+                    ServerAuth.Verify(nonce, method, path, requestBody, status, body, signature);
+                    raw = Encoding.UTF8.GetString(body);
                 }
                 catch (Exception ex) when (ex is HttpRequestException || ex is IOException)
                 {

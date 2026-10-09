@@ -1,5 +1,25 @@
 # PWF Auth for .NET
 
+## Server authentication update
+
+All responses, including errors and clock-correction responses, must carry a valid
+RSA-SHA256 signature from the pinned PWFAuth public key. The private signing key
+stays on the server. Knowing the application secret is not enough to forge this
+signature. A fresh random nonce binds each response to its request, method, path,
+HTTP status and exact body bytes (PWF-REPLY-V1). Query strings are not part of the
+V1 signed path; production HTTPS protects them in transit.
+
+The SDK accepts only `https://pwfauth.com`. Its default transport validates TLS
+certificates and refuses redirects. Missing/invalid signatures fail closed before
+JSON parsing or envelope decryption; unsigned proxy/CDN errors are security errors.
+There is no fallback to the old unsigned protocol. Update the server before clients.
+Applications must never unlock functionality after a security or transport error.
+
+This addresses server emulation. It does not prevent an attacker who controls the
+client machine from modifying the application itself. Keep authoritative valuable
+operations on the server and keep real app secrets out of public repositories.
+
+
 Official client for [PWF Auth](https://pwfauth.com) — license keys, user accounts,
 hardware-ID binding, encrypted sessions with a server-side kill switch, free trials,
 remote content, and OTA update checks.
@@ -475,10 +495,10 @@ configured) is used exactly as it is: the client never changes its headers or it
 The app secret ships inside your binary — that is inherent to the envelope protocol,
 which needs the key on the client to encrypt. Treat compiled output as sensitive:
 obfuscate release builds, and keep the secret out of public source control (read it from
-an environment variable or an encrypted config at startup). Anyone holding the secret can
+a developer-controlled configuration before distribution). Anyone holding the secret can
 call the API as your application.
 
-The real server encrypts every reply on the session and content endpoints; only refusals
+After verifying the independent server signature, the SDK also requires encryption on session and content endpoints; only refusals
 that happen before it can verify the request (a bad secret, a rate limit, a clock too far
 off) come back as plain JSON. A plain reply that claims success therefore did not come
 from PWF Auth — `LoginAsync` and the other encrypted calls throw `PwfSecurityException`
@@ -488,3 +508,5 @@ where you catch `PwfHttpException`, and never unlock the application on it.
 ## License
 
 MIT © PWF Auth
+
+Custom HttpClient instances are trusted application code: configure them to reject redirects and validate TLS certificates. The SDK cannot inspect an injected transport's internal handler. Independent response signature verification still applies.

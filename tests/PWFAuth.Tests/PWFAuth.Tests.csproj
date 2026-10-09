@@ -25,4 +25,5 @@
     <ProjectReference Include="../../src/PWFAuth/PWFAuth.csproj" />
   </ItemGroup>
 
+<ItemGroup><None Update="signed-reply.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>
