@@ -1,5 +1,16 @@
 # PWF Auth for .NET
 
+## Install this security release now
+
+nuget.org publication of 1.4.0 is pending. Installing the registry's latest version
+may still select the older release. Download [PWFAuth.1.4.0.nupkg](https://github.com/pwfauth/pwfauth-dotnet/releases/download/v1.4.0/PWFAuth.1.4.0.nupkg), place it in a local NuGet source,
+and select version 1.4.0. Keep nuget.org as a source for its dependencies.
+The updated C#/VB.NET example repositories already include the verified package
+in `vendor/` and a `NuGet.Config` that restores it automatically.
+
+Package SHA-256: `fbe308ec8ab47e9c9ce1464ea3487b91a3fbd64adae2a178c279a0d5f21ce90f`.
+
+
 ## Server authentication update
 
 All responses, including errors and clock-correction responses, must carry a valid
