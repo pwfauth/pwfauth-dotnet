@@ -18,8 +18,20 @@ public class ServerAuthTests {
         foreach(var signature in new[]{"","!"}) {var bad=(object[])args.Clone();bad[6]=signature;Assert.IsType<PwfSecurityException>(Assert.Throws<TargetInvocationException>(()=>verify.Invoke(null,bad)).InnerException);}
     }
     [Theory]
-    [InlineData("http://pwfauth.com")][InlineData("http://127.0.0.1:8080")][InlineData("https://evil.test")][InlineData("https://pwfauth.com.evil.test")][InlineData("https://pwfauth.com@evil.test")][InlineData("https://pwfauth.com:444")][InlineData("https://pwfauth.com/api")]
+    [InlineData("http://pwfauth.com")][InlineData("https://evil.test")][InlineData("https://pwfauth.com.evil.test")][InlineData("https://pwfauth.com@evil.test")][InlineData("https://pwfauth.com:444")][InlineData("https://pwfauth.com/api")]
+    [InlineData("http://localhost.evil.test")][InlineData("http://127.0.0.1.evil.test")][InlineData("http://evil.test/127.0.0.1")][InlineData("http://user@127.0.0.1")][InlineData("http://127.0.0.1@evil.test")]
+    [InlineData("http://192.168.1.10")][InlineData("http://10.0.0.1")][InlineData("http://0.0.0.0")][InlineData("ftp://127.0.0.1")][InlineData("file://localhost/c:/x")]
+    [InlineData("http://127.0.0.1/a?b=c")][InlineData("http://127.0.0.1/a#b")][InlineData("http://127.0.0.1/a%2F..")][InlineData("http://127.0.0.1//evil")][InlineData("http://127.0.0.1\\evil")]
     public void RejectsOtherOrigins(string url) {Assert.Throws<PwfSecurityException>(()=>new PwfClient(new PwfClientOptions{AppSecret=new string('a',64),BaseUrl=url}));}
+    // 1.5.0: a development server on this computer; its replies still need the pinned signature
+    [Theory]
+    [InlineData("https://pwfauth.com")][InlineData("https://pwfauth.com/")][InlineData("http://127.0.0.1")][InlineData("http://127.0.0.1:8093")][InlineData("http://localhost/pwfauth")]
+    [InlineData("http://LOCALHOST:8080/pwf-auth/v2/")][InlineData("https://localhost:8443")][InlineData("http://[::1]:8080")]
+    public void AcceptsProductionAndThisComputer(string url) {using(var c=new PwfClient(new PwfClientOptions{AppSecret=new string('a',64),BaseUrl=url})){Assert.NotNull(c);}}
+    [Fact] public async Task LoopbackUnsignedReplyRejected() {
+        using(var http=new System.Net.Http.HttpClient(new FakeHandler(r=>new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new System.Net.Http.StringContent(new CryptoEnvelope(new string('a',64)).Encrypt("{\"success\":true,\"session_id\":\"fake\"}"))})))
+        using(var client=new PwfClient(new PwfClientOptions{AppSecret=new string('a',64),BaseUrl="http://127.0.0.1/pwfauth"},http)) {await Assert.ThrowsAsync<PwfSecurityException>(()=>client.LoginAsync("anything"));Assert.False(client.IsSignedIn);}
+    }
     [Fact] public async Task UnsignedReplyRejected() {
         using(var http=new System.Net.Http.HttpClient(new FakeHandler(r=>new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new System.Net.Http.StringContent(new CryptoEnvelope(new string('a',64)).Encrypt("{\"success\":true,\"session_id\":\"fake\"}"))})))
         using(var client=new PwfClient(new PwfClientOptions{AppSecret=new string('a',64)},http)) {await Assert.ThrowsAsync<PwfSecurityException>(()=>client.LoginAsync("anything"));Assert.False(client.IsSignedIn);}

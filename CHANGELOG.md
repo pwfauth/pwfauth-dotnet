@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.0
+
+### Changed
+
+- **New server signing key.** Replies are verified against the new pinned public key
+  (RSA-3072, PWF-REPLY-V1 unchanged). 1.4.0 pins the previous key and cannot talk to the
+  current server: update and rebuild.
+- `User-Agent: PWFAuth-dotnet/1.5.0 (+https://pwfauth.com)`.
+
+### Added
+
+- `BaseUrl` accepts a development server on this computer: `http`/`https` to `localhost`,
+  `127.0.0.1` or `[::1]`, with an optional port and a plain path (e.g. `http://127.0.0.1/pwfauth`).
+  Replies from it still need the pinned signature. Every other origin is still rejected,
+  including look-alikes (`localhost.evil.test`, `user@127.0.0.1`), LAN addresses, query strings,
+  fragments and encoded or doubled path separators.
+
 ## 1.4.0
 
 - Pin the production HTTPS origin and independently verify every server response.

@@ -12,7 +12,9 @@ history was rewritten for this release.
 
 ## Intentional compatibility changes
 
-- Only https://pwfauth.com is accepted. Self-hosted/staging/custom origins are rejected.
+- Only https://pwfauth.com is accepted, plus (from 1.5.0) a development server on this
+  computer: localhost, 127.0.0.1 or [::1]. Other self-hosted/staging/custom origins are rejected.
+- 1.5.0 pins a new server signing key. Applications built with 1.4.0 must be rebuilt with 1.5.0.
 - Every HTTP reply must be signed by the production response-signing key. Unsigned
   mock servers, proxies and CDN error pages fail closed with a security exception.
 - Shared-secret encryption alone no longer authenticates a response.
@@ -30,7 +32,7 @@ and application data are not migrated. Existing users do not need replacement ke
 ## Upgrade checklist
 
 1. Preserve a backup/commit of your application's custom changes and dependency lockfile.
-2. Upgrade Python/Node pwfauth to 1.2.0 or NuGet PWFAuth to 1.4.0.
+2. Upgrade Python/Node pwfauth to 1.2.0 or NuGet PWFAuth to 1.5.0.
 3. Remove alternate server URLs; review custom transports and exception handling.
 4. Test a valid license, invalid license, heartbeat/logout, and offline behavior.
 5. Confirm that a security/transport exception never unlocks protected features.
