@@ -1,12 +1,12 @@
 # PWF Auth for .NET
 
-## Install 1.5.0: new server signing key
+## Install 1.5.1
 
-PWF Auth signs its replies with a new key. PWFAuth 1.5.0 pins it; **1.4.0 cannot talk to the
-current server**, so update and rebuild your application.
+PWF Auth signs its replies with a new key. PWFAuth 1.5.0 and newer pin it; **1.4.0 cannot talk to
+the current server**, so update and rebuild your application.
 
 ```sh
-dotnet add package PWFAuth --version 1.5.0
+dotnet add package PWFAuth --version 1.5.1
 ```
 
 ## Server authentication update

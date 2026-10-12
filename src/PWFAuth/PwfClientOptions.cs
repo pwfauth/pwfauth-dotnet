@@ -22,10 +22,8 @@ namespace PWFAuth
         public string AppSecret { get; set; } = string.Empty;
 
         /// <summary>
-        /// The API origin. <c>https://pwfauth.com</c>, or for development a server on this computer:
-        /// <c>http://localhost</c>, <c>http://127.0.0.1</c> or <c>http://[::1]</c>, with an optional port and
-        /// path (e.g. <c>http://127.0.0.1/pwfauth</c>). Other origins are rejected. Replies from any origin
-        /// must carry the pinned server signature.
+        /// The API origin: <c>https://pwfauth.com</c>, the only one accepted. Any other value is rejected,
+        /// and every reply must carry the pinned server signature.
         /// </summary>
         public string BaseUrl { get; set; } = "https://pwfauth.com";
 

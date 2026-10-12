@@ -9,33 +9,13 @@ namespace PWFAuth
     {
         internal const string Production = "https://pwfauth.com";
 
-        /// <summary>
-        /// https://pwfauth.com, or a server on this computer for development (1.5.0): http(s) to
-        /// localhost, 127.0.0.1 or [::1], optionally with a port and a plain path such as /pwfauth.
-        /// A loopback origin is no shortcut: every reply still needs the pinned signature.
-        /// </summary>
+        /// <summary>The only server the SDK talks to (1.5.1: no other origin, not even this computer).</summary>
         internal static void ValidateOrigin(string url)
         {
-            if (url != null && (url.TrimEnd('/') == Production || IsLoopback(url))) return;
-            throw new PwfSecurityException("Only https://pwfauth.com is supported (or, for development, a server on this computer: http://localhost or http://127.0.0.1).");
+            if (url != null && url.TrimEnd('/') == Production) return;
+            throw new PwfSecurityException("Only https://pwfauth.com is supported.");
         }
 
-        private static bool IsLoopback(string url)
-        {
-            if (url.IndexOfAny(new[] {'\\', ' ', '\t', '\r', '\n', '?', '#'}) >= 0) return false;
-            Uri? uri;
-            if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return false;
-            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) return false;
-            if (uri.UserInfo.Length > 0) return false;
-            // the host as written: a literal loopback address or "localhost", never a name that only resolves there
-            string host = uri.Host;
-            if (!(string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) || host == "127.0.0.1" || host == "[::1]")) return false;
-            string path = uri.AbsolutePath;
-            if (path.Contains("//") || path.Contains("/./") || path.Contains("/../") || path.Contains("%")) return false;
-            foreach (char c in path)
-                if (!(c == '/' || c == '-' || c == '_' || c == '.' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) return false;
-            return true;
-        }
         internal static void ValidatePath(string path)
         {
             if (string.IsNullOrEmpty(path) || !path.StartsWith("/", StringComparison.Ordinal) || path.StartsWith("//", StringComparison.Ordinal) || path.IndexOfAny(new[] {'\\', '#', '\r', '\n'}) >= 0) throw new PwfSecurityException("Invalid API path.");
