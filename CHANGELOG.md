@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.5.2
+
+### Fixed
+
+- A request that got no reply at all, usually a connection that sat idle and was closed on the
+  way (Windows error 10054, "An existing connection was forcibly closed by the remote host"),
+  is now sent once more on a new connection, 300 ms later. Before, the first call after a pause
+  could fail with `PwfHttpException` "Cannot reach the license server".
+- Only that case is retried: a reply (even an error reply), a reply that drops while it is
+  read, a timeout and a cancelled call are never sent twice.
+- `User-Agent: PWFAuth-dotnet/1.5.2 (+https://pwfauth.com)`.
+
+Nothing else changed: same signing key, same API. Update the package and rebuild.
+
 ## 1.5.1
 
 ### Changed

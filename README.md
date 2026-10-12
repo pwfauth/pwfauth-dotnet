@@ -1,13 +1,16 @@
 # PWF Auth for .NET
 
-## Install 1.5.1
+## Install 1.5.2
 
 PWF Auth signs its replies with a new key. PWFAuth 1.5.0 and newer pin it; **1.4.0 cannot talk to
 the current server**, so update and rebuild your application.
 
 ```sh
-dotnet add package PWFAuth --version 1.5.1
+dotnet add package PWFAuth --version 1.5.2
 ```
+
+1.5.2 sends a request once more when the connection drops before any reply (Windows error
+10054), so the first call after a pause no longer fails. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Server authentication update
 

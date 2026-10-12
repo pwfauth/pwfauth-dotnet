@@ -815,6 +815,25 @@ namespace PWFAuth
             return request;
         }
 
+        // How long to wait before the second try of a request that got no reply.
+        private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(300);
+
+        // A sent HttpRequestMessage cannot be sent again: the second try goes out as a copy with
+        // the same headers (nonce included) and the same body bytes.
+        private static HttpRequestMessage CopyRequest(HttpRequestMessage request, byte[] body)
+        {
+            var copy = new HttpRequestMessage(request.Method, request.RequestUri);
+            foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
+                copy.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            if (request.Content != null)
+            {
+                copy.Content = new ByteArrayContent(body);
+                foreach (KeyValuePair<string, IEnumerable<string>> header in request.Content.Headers)
+                    copy.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
+            return copy;
+        }
+
         private async Task<PwfResponse> SendAsync(HttpRequestMessage request, bool requireEnvelope, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -825,9 +844,23 @@ namespace PWFAuth
             string method = request.Method.Method;
             string path = request.RequestUri!.AbsolutePath;
             HttpResponseMessage httpResponse;
+            HttpRequestMessage? second = null;
             try
             {
-                httpResponse = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    httpResponse = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException)
+                {
+                    // 1.5.2: no reply at all, so send once more on a new connection. The usual cause
+                    // is a connection that sat idle and was closed on the way (Windows error 10054,
+                    // "connection reset"), and the second try goes through. A reply, even an error
+                    // reply, is never sent twice, and neither is a timeout.
+                    await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+                    second = CopyRequest(request, requestBody);
+                    httpResponse = await _http.SendAsync(second, cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -841,6 +874,7 @@ namespace PWFAuth
                 throw new PwfHttpException(0, "Cannot reach the license server: " + ex.Message, string.Empty, ex);
             }
 
+            using (second)
             using (httpResponse)
             {
                 int status = (int)httpResponse.StatusCode;
