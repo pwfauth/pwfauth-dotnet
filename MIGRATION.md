@@ -12,8 +12,7 @@ history was rewritten for this release.
 
 ## Intentional compatibility changes
 
-- Only https://pwfauth.com is accepted, plus (from 1.5.0) a development server on this
-  computer: localhost, 127.0.0.1 or [::1]. Other self-hosted/staging/custom origins are rejected.
+- Only https://pwfauth.com is accepted. Other self-hosted/staging/custom origins are rejected.
 - 1.5.0 pins a new server signing key. Applications built with 1.4.0 must be rebuilt with 1.5.0.
 - Every HTTP reply must be signed by the production response-signing key. Unsigned
   mock servers, proxies and CDN error pages fail closed with a security exception.

@@ -9,11 +9,6 @@ current server**, so update and rebuild your application.
 dotnet add package PWFAuth --version 1.5.0
 ```
 
-1.5.0 also accepts a development server on your own computer as `BaseUrl`
-(`http://localhost`, `http://127.0.0.1` or `http://[::1]`, with a port and a path such as
-`http://127.0.0.1/pwfauth`). Its replies must carry the same signature, so this is a way to
-test against a local copy of the server, never a way around the check.
-
 ## Server authentication update
 
 All responses, including errors and clock-correction responses, must carry a valid
@@ -23,8 +18,7 @@ signature. A fresh random nonce binds each response to its request, method, path
 HTTP status and exact body bytes (PWF-REPLY-V1). Query strings are not part of the
 V1 signed path; production HTTPS protects them in transit.
 
-The SDK accepts `https://pwfauth.com` and, for development, a server on this computer
-(localhost, 127.0.0.1, [::1]); every other origin is rejected. Its default transport validates TLS
+The SDK accepts only `https://pwfauth.com`; every other origin is rejected. Its default transport validates TLS
 certificates and refuses redirects. Missing/invalid signatures fail closed before
 JSON parsing or envelope decryption; unsigned proxy/CDN errors are security errors.
 There is no fallback to the old unsigned protocol. Update the server before clients.
