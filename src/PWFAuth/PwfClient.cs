@@ -50,6 +50,12 @@ namespace PWFAuth
         private readonly HttpClient _http;
         private readonly bool _ownsHttpClient;
         private readonly string _baseUrl;
+        // 1.6.0: the same license server under a second name, used only when pwfauth.com gives
+        // no reply at all (some networks block the name: Etisalat in the UAE answers "no such
+        // domain"). Fixed here, never configurable; once it answers, the client stays on it.
+        private const string BackupUrl = "https://pwfauth.net";
+        private volatile string _activeBase;   // _baseUrl, or BackupUrl once that answered
+        private int _answered;                 // 1 once any verified reply has arrived
         private readonly object _sync = new object();
 
         private CancellationTokenSource? _heartbeatCts;
@@ -77,6 +83,7 @@ namespace PWFAuth
             _options = options;
             _crypto = new CryptoEnvelope(options.AppSecret, options.MaxClockDriftSeconds);
             _baseUrl = options.BaseUrl.TrimEnd('/');
+            _activeBase = _baseUrl;
             _ownsHttpClient = httpClient == null;
             // A caller's HttpClient is left alone: setting Timeout throws once it has sent a
             // request, and the caller may depend on the value it already has.
@@ -809,10 +816,24 @@ namespace PWFAuth
         private HttpRequestMessage CreateRequest(HttpMethod method, string path)
         {
             ServerAuth.ValidatePath(path);
-            var request = new HttpRequestMessage(method, _baseUrl + path);
+            var request = new HttpRequestMessage(method, _activeBase + path);
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
             request.Headers.TryAddWithoutValidation("X-App-Secret", _options.AppSecret);
             return request;
+        }
+
+        // Only from pwfauth.com itself, only once, and only when nothing came back: no
+        // connection or name (HttpRequestException), or a timeout before any reply ever arrived.
+        private bool CanTryBackup(Exception ex, HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (!string.Equals(_activeBase, ServerAuth.Production, StringComparison.Ordinal) ||
+                request.RequestUri == null ||
+                !request.RequestUri.AbsoluteUri.StartsWith(ServerAuth.Production + "/", StringComparison.Ordinal))
+                return false;
+            if (ex is HttpRequestException)
+                return true;
+            return ex is OperationCanceledException && !cancellationToken.IsCancellationRequested &&
+                Volatile.Read(ref _answered) == 0;
         }
 
         // How long to wait before the second try of a request that got no reply.
@@ -820,9 +841,9 @@ namespace PWFAuth
 
         // A sent HttpRequestMessage cannot be sent again: the second try goes out as a copy with
         // the same headers (nonce included) and the same body bytes.
-        private static HttpRequestMessage CopyRequest(HttpRequestMessage request, byte[] body)
+        private static HttpRequestMessage CopyRequest(HttpRequestMessage request, byte[] body, Uri? uri = null)
         {
-            var copy = new HttpRequestMessage(request.Method, request.RequestUri);
+            var copy = new HttpRequestMessage(request.Method, uri ?? request.RequestUri);
             foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
                 copy.Headers.TryAddWithoutValidation(header.Key, header.Value);
             if (request.Content != null)
@@ -845,21 +866,34 @@ namespace PWFAuth
             string path = request.RequestUri!.AbsolutePath;
             HttpResponseMessage httpResponse;
             HttpRequestMessage? second = null;
+            HttpRequestMessage? backup = null;
             try
             {
                 try
                 {
-                    httpResponse = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        httpResponse = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (HttpRequestException)
+                    {
+                        // 1.5.2: no reply at all, so send once more on a new connection. The usual cause
+                        // is a connection that sat idle and was closed on the way (Windows error 10054,
+                        // "connection reset"), and the second try goes through. A reply, even an error
+                        // reply, is never sent twice, and neither is a timeout.
+                        await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+                        second = CopyRequest(request, requestBody);
+                        httpResponse = await _http.SendAsync(second, cancellationToken).ConfigureAwait(false);
+                    }
                 }
-                catch (HttpRequestException)
+                catch (Exception ex) when (CanTryBackup(ex, request, cancellationToken))
                 {
-                    // 1.5.2: no reply at all, so send once more on a new connection. The usual cause
-                    // is a connection that sat idle and was closed on the way (Windows error 10054,
-                    // "connection reset"), and the second try goes through. A reply, even an error
-                    // reply, is never sent twice, and neither is a timeout.
-                    await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
-                    second = CopyRequest(request, requestBody);
-                    httpResponse = await _http.SendAsync(second, cancellationToken).ConfigureAwait(false);
+                    // 1.6.0: still no reply from pwfauth.com (or a timeout before this client ever got
+                    // one): the name may be blocked on this network. The same request goes to the same
+                    // server under its second name; nothing reached the first one.
+                    backup = CopyRequest(request, requestBody, new Uri(BackupUrl + request.RequestUri!.PathAndQuery));
+                    httpResponse = await _http.SendAsync(backup, cancellationToken).ConfigureAwait(false);
+                    _activeBase = BackupUrl;
                 }
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
@@ -875,6 +909,7 @@ namespace PWFAuth
             }
 
             using (second)
+            using (backup)
             using (httpResponse)
             {
                 int status = (int)httpResponse.StatusCode;
@@ -885,6 +920,7 @@ namespace PWFAuth
                     System.Collections.Generic.IEnumerable<string>? signatures;
                     string signature = httpResponse.Headers.TryGetValues("X-PWF-Signature", out signatures) ? string.Join("", signatures!) : string.Empty;
                     ServerAuth.Verify(nonce, method, path, requestBody, status, body, signature);
+                    Interlocked.Exchange(ref _answered, 1);
                     raw = Encoding.UTF8.GetString(body);
                 }
                 catch (Exception ex) when (ex is HttpRequestException || ex is IOException)

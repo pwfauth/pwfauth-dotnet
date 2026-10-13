@@ -15,7 +15,7 @@
 
   <PropertyGroup>
     <PackageId>PWFAuth</PackageId>
-    <Version>1.5.2</Version>
+    <Version>1.6.0</Version>
     <Authors>PWF Auth</Authors>
     <Company>PWF Auth</Company>
     <Product>PWF Auth .NET Client</Product>
@@ -29,7 +29,7 @@
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <Copyright>Copyright (c) 2026 PWF Auth</Copyright>
-    <PackageReleaseNotes>New server signing key: replies are verified against the new pinned key, so update to this version (1.4.0 cannot talk to the current server). 1.5.1: https://pwfauth.com is the only server address accepted. 1.5.2: a request that gets no reply at all (a dropped connection, Windows error 10054) is sent once more. See CHANGELOG.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>New server signing key: replies are verified against the new pinned key, so update to this version (1.4.0 cannot talk to the current server). 1.5.1: https://pwfauth.com is the only server address accepted. 1.5.2: a request that gets no reply at all (a dropped connection, Windows error 10054) is sent once more. 1.6.0: on networks that block the name pwfauth.com, requests reach the same server as pwfauth.net. See CHANGELOG.md.</PackageReleaseNotes>
   </PropertyGroup>
 
   <PropertyGroup>

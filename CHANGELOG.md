@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.0
+
+### Added
+
+- Some networks block the name `pwfauth.com` (Etisalat in the UAE answers "no such domain"), so
+  the app could not reach the license server without a VPN. When a request gets no reply at all
+  (after the second try of 1.5.2), it now goes to the same server under its second name,
+  `https://pwfauth.net`, with the same headers, nonce and body.
+- Only when nothing came back: no connection or name (`HttpRequestException`), or a timeout
+  before this client ever got a reply. A reply, even an error reply, is never sent to the other
+  name, and a timeout after the first reply is not either.
+- Once `pwfauth.net` answers, the client stays on it. Both names are fixed in the library;
+  `BaseUrl` still accepts only `https://pwfauth.com`.
+- `User-Agent: PWFAuth-dotnet/1.6.0 (+https://pwfauth.com)`.
+
+Nothing else changed: same signing key, same API. Update the package and rebuild.
+
 ## 1.5.2
 
 ### Fixed
