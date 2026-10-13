@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.0
+
+### Added
+
+- **User variables.** Small values your program keeps on the PWF Auth server for the signed-in
+  customer (a key or an account), that follow them to a new PC and that you can see and edit in
+  the panel: `SetVariableAsync(name, value)`, `GetVariableAsync(name)` (null when never set),
+  `GetVariablesAsync()` and `DeleteVariableAsync(name)`. Docs: https://pwfauth.com/docs?p=variables
+- `PwfRefusedException`: what those typed calls throw when the server refuses (`ErrorCode`,
+  `Message`, `Response`). The calls that return a `PwfResponse` are unchanged.
+- `User-Agent: PWFAuth-dotnet/1.7.0 (+https://pwfauth.com)`.
+
+Nothing else changed: same signing key, same API.
+
 ## 1.6.0
 
 ### Added

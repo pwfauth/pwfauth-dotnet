@@ -1,12 +1,17 @@
 # PWF Auth for .NET
 
-## Install 1.6.0
+## Install 1.7.0
+
+1.7.0 adds **user variables**: values your program keeps on the server for each customer
+(`SetVariableAsync`, `GetVariableAsync`, `GetVariablesAsync`, `DeleteVariableAsync`), editable
+in the panel. See [CHANGELOG.md](CHANGELOG.md).
+
 
 PWF Auth signs its replies with a new key. PWFAuth 1.5.0 and newer pin it; **1.4.0 cannot talk to
 the current server**, so update and rebuild your application.
 
 ```sh
-dotnet add package PWFAuth --version 1.6.0
+dotnet add package PWFAuth --version 1.7.0
 ```
 
 1.6.0 works on networks that block the name pwfauth.com (Etisalat in the UAE): when a request
@@ -438,6 +443,8 @@ var status  = await client.CheckKeyAsync(key);        // no session, no seat con
 var info    = await client.GetAppInfoAsync();         // name, version, download URL, socials
 var texts   = await client.GetTextsAsync();           // remote strings, per-key overrides
 var slides  = await client.GetSlidesAsync();          // announcement slides
+await client.SetVariableAsync("theme", "dark");        // a value kept on the server for this customer
+var theme   = await client.GetVariableAsync("theme"); // null when never set; also GetVariablesAsync, DeleteVariableAsync
 var update  = await client.CheckUpdateAsync("1.4.2"); // OTA: version, sha256, download URL
 var trial   = await client.CreateTrialAsync();        // free trial for this machine
 var moved   = await client.ResetHardwareIdAsync(key); // free the key for a new PC

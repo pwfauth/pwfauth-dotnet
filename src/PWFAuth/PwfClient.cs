@@ -438,6 +438,76 @@ namespace PWFAuth
             }, cancellationToken);
         }
 
+        // ─────────────────── user variables ───────────────────
+
+        /// <summary>
+        /// Reads one user variable of the signed-in customer: a value your program (or you,
+        /// in the panel) stored on the server for this key or account. Null when it was never
+        /// set. See https://pwfauth.com/docs?p=variables.
+        /// </summary>
+        /// <param name="name">Letters, digits, '_', '.' or '-', up to 64 characters.</param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <exception cref="InvalidOperationException">No open session.</exception>
+        /// <exception cref="PwfRefusedException">The server refused (for example <c>SESSION_EXPIRED</c>, <c>INVALID_NAME</c>).</exception>
+        public async Task<string?> GetVariableAsync(string name, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            PwfResponse r = await VariableCallAsync("get", name, null, cancellationToken).ConfigureAwait(false);
+            return r.GetString("value");
+        }
+
+        /// <summary>
+        /// Stores one user variable for the signed-in customer on the server, making it or
+        /// replacing its value. It follows the customer to a new PC, and you can see and edit
+        /// it in the panel (Licences or Users, the side panel).
+        /// </summary>
+        /// <param name="name">Letters, digits, '_', '.' or '-', up to 64 characters.</param>
+        /// <param name="value">Text, up to 4 KB. Keep structured data as JSON.</param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <exception cref="InvalidOperationException">No open session.</exception>
+        /// <exception cref="PwfRefusedException">The server refused (<c>INVALID_NAME</c>, <c>VALUE_TOO_LONG</c>, <c>TOO_MANY_VARS</c>, <c>SESSION_EXPIRED</c>).</exception>
+        public async Task SetVariableAsync(string name, string value, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (value == null) throw new ArgumentNullException("value");
+            await VariableCallAsync("set", name, value, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>Removes one user variable of the signed-in customer. True when there was one.</summary>
+        /// <param name="name">The variable's name.</param>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <exception cref="InvalidOperationException">No open session.</exception>
+        /// <exception cref="PwfRefusedException">The server refused.</exception>
+        public async Task<bool> DeleteVariableAsync(string name, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            PwfResponse r = await VariableCallAsync("delete", name, null, cancellationToken).ConfigureAwait(false);
+            return r.GetBoolean("deleted", false);
+        }
+
+        /// <summary>Every user variable of the signed-in customer, name to value.</summary>
+        /// <param name="cancellationToken">Cancels the request.</param>
+        /// <exception cref="InvalidOperationException">No open session.</exception>
+        /// <exception cref="PwfRefusedException">The server refused.</exception>
+        public async Task<IReadOnlyDictionary<string, string>> GetVariablesAsync(CancellationToken cancellationToken = default(CancellationToken))
+        {
+            PwfResponse r = await VariableCallAsync("list", null, null, cancellationToken).ConfigureAwait(false);
+            return r.GetStringMap("vars");
+        }
+
+        private async Task<PwfResponse> VariableCallAsync(string action, string? name, string? value, CancellationToken cancellationToken)
+        {
+            if (!IsSignedIn) throw new InvalidOperationException("No open session — call LoginAsync or AccountLoginAsync first.");
+            if (name != null && name.Length == 0) throw new ArgumentException("A variable name is required.", "name");
+            var body = new Dictionary<string, object?>
+            {
+                ["session_id"] = SessionId,
+                ["action"] = action,
+            };
+            if (name != null) body["name"] = name;
+            if (value != null) body["value"] = value;
+            PwfResponse r = await PostEnvelopeAsync("/api/auth/var.php", body, cancellationToken).ConfigureAwait(false);
+            if (!r.Success) throw new PwfRefusedException(r);
+            return r;
+        }
+
         /// <summary>
         /// Asks whether a newer build exists. The reply carries
         /// <c>update_available</c> and, when true, an <c>update</c> object with the

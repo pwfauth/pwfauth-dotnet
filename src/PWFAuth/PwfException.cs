@@ -75,4 +75,28 @@ namespace PWFAuth
         /// <summary>Creates the exception with the underlying cause.</summary>
         public PwfSecurityException(string message, Exception innerException) : base(message, innerException) { }
     }
+
+    /// <summary>
+    /// The license server answered, and refused: thrown by the typed calls that return a value
+    /// instead of a <see cref="PwfResponse"/> (the user-variable calls). <see cref="ErrorCode"/>
+    /// is the server's code (for example <c>SESSION_EXPIRED</c>, <c>INVALID_NAME</c>,
+    /// <c>TOO_MANY_VARS</c>) and the message is the server's sentence; the whole reply is
+    /// <see cref="Response"/>.
+    /// </summary>
+    public class PwfRefusedException : PwfException
+    {
+        /// <summary>The server's error code, or an empty string when it sent none.</summary>
+        public string ErrorCode { get; }
+
+        /// <summary>The reply the server sent.</summary>
+        public PwfResponse Response { get; }
+
+        /// <summary>Creates the exception from the refusing reply.</summary>
+        public PwfRefusedException(PwfResponse response)
+            : base(response.Message ?? response.ErrorCode ?? "The license server refused the request.")
+        {
+            Response = response;
+            ErrorCode = response.ErrorCode ?? string.Empty;
+        }
+    }
 }
