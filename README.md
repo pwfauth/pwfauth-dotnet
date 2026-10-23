@@ -1,14 +1,16 @@
+<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.ar.md">العربية</a></p>
+
 # PWF Auth for .NET
 
 ## Install 1.7.0
 
 1.7.0 adds **user variables**: values your program keeps on the server for each customer
 (`SetVariableAsync`, `GetVariableAsync`, `GetVariablesAsync`, `DeleteVariableAsync`), editable
-in the panel. See [CHANGELOG.md](CHANGELOG.md).
+in the panel. See [CHANGELOG.md](CHANGELOG.md)
 
 
 PWF Auth signs its replies with a new key. PWFAuth 1.5.0 and newer pin it; **1.4.0 cannot talk to
-the current server**, so update and rebuild your application.
+the current server**, so update and rebuild your application
 
 ```sh
 dotnet add package PWFAuth --version 1.7.0
@@ -17,7 +19,7 @@ dotnet add package PWFAuth --version 1.7.0
 1.6.0 works on networks that block the name pwfauth.com (Etisalat in the UAE): when a request
 gets no reply at all, it goes to the same server as `https://pwfauth.net`. 1.5.2 sends a request
 once more when the connection drops before any reply (Windows error 10054).
-See [CHANGELOG.md](CHANGELOG.md).
+See [CHANGELOG.md](CHANGELOG.md)
 
 ## Server authentication update
 
@@ -26,45 +28,45 @@ RSA-SHA256 signature from the pinned PWFAuth public key. The private signing key
 stays on the server. Knowing the application secret is not enough to forge this
 signature. A fresh random nonce binds each response to its request, method, path,
 HTTP status and exact body bytes (PWF-REPLY-V1). Query strings are not part of the
-V1 signed path; production HTTPS protects them in transit.
+V1 signed path; production HTTPS protects them in transit
 
 The SDK accepts only `https://pwfauth.com`; every other origin is rejected. Its default transport validates TLS
 certificates and refuses redirects. Missing/invalid signatures fail closed before
 JSON parsing or envelope decryption; unsigned proxy/CDN errors are security errors.
 There is no fallback to the old unsigned protocol. Update the server before clients.
-Applications must never unlock functionality after a security or transport error.
+Applications must never unlock functionality after a security or transport error
 
 This addresses server emulation. It does not prevent an attacker who controls the
 client machine from modifying the application itself. Keep authoritative valuable
-operations on the server and keep real app secrets out of public repositories.
+operations on the server and keep real app secrets out of public repositories
 
 
 Official client for [PWF Auth](https://pwfauth.com) — license keys, user accounts,
 hardware-ID binding, encrypted sessions with a server-side kill switch, free trials,
-remote content, and OTA update checks.
+remote content, and OTA update checks
 
 ```bash
 dotnet add package PWFAuth
 ```
 
 Targets **netstandard2.0** (works on .NET Framework 4.6.2+, so WinForms/WPF and VB.NET
-desktop apps are first-class) and **net8.0**.
+desktop apps are first-class) and **net8.0**
 
 ## What's new in 1.3.1
 
 * **No connection is a `PwfHttpException`.** Offline, DNS, a firewall, a proxy or TLS: the
   call throws `PwfHttpException` with `StatusCode` 0 and the network error as `InnerException`.
   1.3.0 let the raw `HttpRequestException` through. `LogoutAsync` now returns `null` in that
-  case, as documented, instead of throwing.
+  case, as documented, instead of throwing
 
 ## What's new in 1.3.0
 
 * **Sign up with a license key, and add keys to extend an account.** `RegisterAccountWithKeyAsync`
   creates an account from a key (it gets the key's time and device limit), and `RedeemKeyAsync`
   adds another key's time to an existing account, even after it has expired. See
-  *Accounts that run on license keys* below.
+  *Accounts that run on license keys* below
 * New `PwfErrorCodes`: `KeyRequired`, `KeyAlreadyUsed`, `KeyInUse`, `KeyRedeemed`,
-  `AlreadyLifetime`, `UsernameExists`.
+  `AlreadyLifetime`, `UsernameExists`
 
 ## What's new in 1.2.0
 
@@ -72,31 +74,31 @@ desktop apps are first-class) and **net8.0**.
   more than five minutes off, and now sends its own time with the refusal. The client shifts
   its timestamps by the difference and sends the request once more, so signing in and the
   heartbeat work on a PC whose date or time is wrong — no more "check your clock" support
-  tickets. Opt out with `PwfClientOptions.AutoCorrectClock = false`.
+  tickets. Opt out with `PwfClientOptions.AutoCorrectClock = false`
 
 ## What's new in 1.1.0
 
 * **`ResetHardwareIdAsync`** — customers move their license to a new PC themselves,
   instantly (see *Let users move their license to a new PC* below).
   `RequestHardwareResetAsync` is obsolete: the dashboard does not show those requests
-  yet, so nobody could approve one.
+  yet, so nobody could approve one
 * **Plain "success" replies are rejected.** The real server encrypts every reply on the
   session and content endpoints, so a plain JSON reply claiming success can only come from
   a proxy or a fake server. It now raises `PwfSecurityException`. Plain failure replies are
-  still returned as failed responses.
+  still returned as failed responses
 * **The kill switch cannot be dodged by changing the clock.** The heartbeat now counts only
   encrypted replies as answers, so the plain refusals the server sends to a clock that is
   more than five minutes off end the session with `CLOCK_SKEW` instead of being ignored.
-  Plain HTTP 429 gets its own budget, `MaxRateLimitedBeats` (see *Why the heartbeat matters*).
+  Plain HTTP 429 gets its own budget, `MaxRateLimitedBeats` (see *Why the heartbeat matters*)
 * **`SessionEnded` arrives on the UI thread** when `StartHeartbeat()` is called from it
   (WinForms/WPF), so handlers can touch controls directly. Opt out with
-  `PwfClientOptions.RaiseEventsOnCapturedContext = false`.
+  `PwfClientOptions.RaiseEventsOnCapturedContext = false`
 * New `PwfErrorCodes`: `DeviceLimit`, `OpenAccessLimit`, `KeyNotActive`, `NoHwid`,
-  `RateLimited`, `SelfResetDisabled`, and the client-side `ClockSkew`.
-* Every request identifies itself with `User-Agent: PWFAuth-dotnet/1.1.0 (+https://pwfauth.com)`.
-* An `HttpClient` you pass in is no longer modified — set its `Timeout` yourself.
+  `RateLimited`, `SelfResetDisabled`, and the client-side `ClockSkew`
+* Every request identifies itself with `User-Agent: PWFAuth-dotnet/1.1.0 (+https://pwfauth.com)`
+* An `HttpClient` you pass in is no longer modified — set its `Timeout` yourself
 
-Full history: [CHANGELOG.md](https://github.com/pwfauth/pwfauth-dotnet/blob/main/CHANGELOG.md).
+Full history: [CHANGELOG.md](https://github.com/pwfauth/pwfauth-dotnet/blob/main/CHANGELOG.md)
 
 ## Quick start
 
@@ -138,22 +140,22 @@ If login.Success Then client.StartHeartbeat()
 
 In a form, that `StartHeartbeat()` runs on the UI thread, so `SessionEnded` is raised on
 the UI thread too and the `MessageBox` is safe — see *WinForms: SessionEnded on the UI
-thread* below.
+thread* below
 
 ## Why the heartbeat matters
 
-`StartHeartbeat()` is not optional bookkeeping — it is the enforcement point.
+`StartHeartbeat()` is not optional bookkeeping — it is the enforcement point
 
 * The server drops a session that stops beating, so a client that never beats loses
-  nothing but also never learns it was revoked.
+  nothing but also never learns it was revoked
 * Every beat re-checks the license: ban, pause, expiry, HWID reset, deletion and
-  maintenance mode all end the session on the very next beat.
+  maintenance mode all end the session on the very next beat
 * If the server is unreachable for `MaxHeartbeatFailures` beats in a row (3 by default),
   the client ends the session itself with `NETWORK_LOST`. Without that, blocking the
-  license domain in a firewall would keep the application running forever.
+  license domain in a firewall would keep the application running forever
 * A beat answered with a plain, unencrypted "success" did not come from the license
   server, so it counts as a failed beat — a proxy answering in the server's place cannot
-  keep the application running either.
+  keep the application running either
 
 ### The kill switch cannot be dodged by changing the clock
 
@@ -165,20 +167,20 @@ the application running and deaf to bans. Now only an encrypted reply counts as 
 asks the user to correct the date and time (other plain refusals end it with
 `NETWORK_LOST`). Plain `429 Too Many Requests` replies get a larger budget,
 `MaxRateLimitedBeats` (10 by default), so users behind a busy shared IP are not signed out
-within a minute — but a proxy answering 429 forever still ends the session.
+within a minute — but a proxy answering 429 forever still ends the session
 
 Since 1.2.0 the client first tries to repair the clock: the server's refusal carries its own
 time, the client shifts its timestamps by the difference and sends the beat once more
 (`AutoCorrectClock`, on by default). Bans still arrive, because the corrected beat gets a
 real, encrypted answer. A session ends with `CLOCK_SKEW` only when that does not help, or
-with `AutoCorrectClock = false`.
+with `AutoCorrectClock = false`
 
 ## WinForms: SessionEnded on the UI thread
 
 `StartHeartbeat()` remembers the `SynchronizationContext` it was called on. Call it from
 the UI thread — for example right after `await client.LoginAsync(...)` in a button
 handler — and `SessionEnded` is raised back on that thread, so the handler can update
-controls directly, without `Invoke`/`BeginInvoke` (WPF: without the `Dispatcher`).
+controls directly, without `Invoke`/`BeginInvoke` (WPF: without the `Dispatcher`)
 
 ```csharp
 using PWFAuth;
@@ -254,12 +256,12 @@ End Sub
 Only the event is marshalled — the beats themselves never run on the UI thread. Where there
 is no UI context (console apps, services, a background thread) the event is raised on the
 heartbeat's own thread, as in 1.0. Set `RaiseEventsOnCapturedContext = false` in
-`PwfClientOptions` to always get that behaviour.
+`PwfClientOptions` to always get that behaviour
 
 ## What the login reply contains
 
 A successful `LoginAsync` carries the whole licence state, so you rarely need a second
-call to show the user what they have.
+call to show the user what they have
 
 | Field | Type | Notes |
 | --- | --- | --- |
@@ -278,7 +280,7 @@ call to show the user what they have.
 | `heartbeat_interval` | number | Seconds; `StartHeartbeat()` already honours it |
 
 `expires_at` and `days_remaining` are `null` on lifetime keys — always check before
-formatting, or a lifetime customer sees a crash instead of "never expires".
+formatting, or a lifetime customer sees a crash instead of "never expires"
 
 ```csharp
 using System.Text.Json;
@@ -346,14 +348,14 @@ btnProExport.Enabled = features.ContainsKey("pro_tier") AndAlso features("pro_ti
 ```
 
 Nothing here is cached by the client — re-read it from the `login` response you already
-hold, or call `CheckKeyAsync(key)` later for a fresh read without consuming a seat.
+hold, or call `CheckKeyAsync(key)` later for a fresh read without consuming a seat
 
 ## Let users move their license to a new PC
 
 A key binds to the machine that activates it. When a customer replaces their PC,
 `LoginAsync` on the new one fails with `HwidMismatch` (or `DeviceLimit` for a multi-device
 key that is already on all its machines). `ResetHardwareIdAsync` unbinds the key on the
-spot — no ticket, no waiting for you — and the next `LoginAsync` binds it to this machine.
+spot — no ticket, no waiting for you — and the next `LoginAsync` binds it to this machine
 
 ```csharp
 var login = await client.LoginAsync(key);
@@ -397,16 +399,16 @@ Resets follow your application's policy: you can turn them off, and you choose t
 cooldown between two resets (12 hours by default). On success,
 `reset.GetString("next_reset_at")` (UTC, ISO 8601) says when the next one is allowed. A
 reset unbinds every device of the key and ends all of its sessions, so the old PC is signed
-out at its next heartbeat.
+out at its next heartbeat
 
 Logging out is not a reset: `LogoutAsync` ends the session, but the key stays bound to the
-machine.
+machine
 
 ## Accounts that run on license keys
 
 Customers buy a key, create an account with it, and later add more keys to the same account
 to extend it: one username and password, no pile of keys to keep. Turn on **Sign-up needs a
-license key** in App Settings > Account sign-up to make the key mandatory at sign-up.
+license key** in App Settings > Account sign-up to make the key mandatory at sign-up
 
 ```csharp
 // Sign up: the account gets the key's time and device limit; the key is used up.
@@ -425,7 +427,7 @@ Console.WriteLine(added.GetInt32("days_remaining", 0));
 In App Settings you choose whether a key's time goes **on top of the time left** or
 **starts again from now**, and whether the account **keeps its own device limit** or
 **takes the key's**. A used key cannot sign in on its own (`LoginAsync` answers
-`KEY_REDEEMED`), and banning it in the dashboard takes its time back from the account.
+`KEY_REDEEMED`), and banning it in the dashboard takes its time back from the account
 
 | Code | Meaning |
 | --- | --- |
@@ -459,7 +461,7 @@ await client.RedeemKeyAsync("alice", "s3cret", newKey);           // add a key's
 
 Endpoints this client does not wrap yet are still reachable — `PostEnvelopeAsync`,
 `GetEnvelopeAsync` and `PostPlainAsync` are public, and `CryptoEnvelope` is too. The two
-envelope transports refuse a plain reply that claims success, like every wrapped call.
+envelope transports refuse a plain reply that claims success, like every wrapped call
 
 ## Reading results
 
@@ -501,7 +503,7 @@ var client = new PwfClient(new PwfClientOptions
 Every failure to get a usable reply is a `PwfHttpException`. `StatusCode` 0 means no reply at
 all (no connection, DNS, a firewall, a proxy, TLS, or no answer within `Timeout`); the network
 error is the `InnerException`. Any other value is the HTTP status of a reply that was not the
-API's JSON (a CDN error page, a wrong base URL).
+API's JSON (a CDN error page, a wrong base URL)
 
 Every request carries `User-Agent: PWFAuth-dotnet/1.3.1 (+https://pwfauth.com)` — the
 version follows the package — so SDK traffic is easy to tell apart in logs and firewalls.
@@ -509,7 +511,7 @@ Headers are set on each request, never on the `HttpClient`. One you pass to
 `new PwfClient(options, httpClient)` (from `IHttpClientFactory`, or with a proxy
 configured) is used exactly as it is: the client never changes its headers or its
 `Timeout` and never disposes it. Set its `Timeout` yourself — `PwfClientOptions.Timeout`
-(15 seconds by default) applies only to the `HttpClient` the client creates for itself.
+(15 seconds by default) applies only to the `HttpClient` the client creates for itself
 
 ## Security note
 
@@ -517,17 +519,17 @@ The app secret ships inside your binary — that is inherent to the envelope pro
 which needs the key on the client to encrypt. Treat compiled output as sensitive:
 obfuscate release builds, and keep the secret out of public source control (read it from
 a developer-controlled configuration before distribution). Anyone holding the secret can
-call the API as your application.
+call the API as your application
 
 After verifying the independent server signature, the SDK also requires encryption on session and content endpoints; only refusals
 that happen before it can verify the request (a bad secret, a rate limit, a clock too far
 off) come back as plain JSON. A plain reply that claims success therefore did not come
 from PWF Auth — `LoginAsync` and the other encrypted calls throw `PwfSecurityException`
 rather than trust it, and the heartbeat treats it like an unreachable server. Catch it
-where you catch `PwfHttpException`, and never unlock the application on it.
+where you catch `PwfHttpException`, and never unlock the application on it
 
 ## License
 
 MIT © PWF Auth
 
-Custom HttpClient instances are trusted application code: configure them to reject redirects and validate TLS certificates. The SDK cannot inspect an injected transport's internal handler. Independent response signature verification still applies.
+Custom HttpClient instances are trusted application code: configure them to reject redirects and validate TLS certificates. The SDK cannot inspect an injected transport's internal handler. Independent response signature verification still applies
