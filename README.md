@@ -1,4 +1,5 @@
 <p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.tr.md">Türkçe</a> · <a href="README.ar.md">العربية</a></p>
+<p align="center">Video tutorials: <a href="https://www.youtube.com/@pwfauth">youtube.com/@pwfauth</a></p>
 
 # PWF Auth for .NET
 
